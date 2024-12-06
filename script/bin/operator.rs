@@ -1,5 +1,6 @@
 mod genesis;
 
+use alloy::hex::ToHex;
 /// Continuously generate proofs & keep light client updated with chain
 use alloy::{
     hex,
@@ -15,10 +16,9 @@ use alloy::{
 };
 use alloy_primitives::{B256, U256};
 use anyhow::Result;
-use avail_rust::avail;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::WaitFor;
+use avail_rust::{AOnlineClient, Block, WaitFor};
 use avail_rust::{AvailExtrinsicParamsBuilder, Keypair, SecretUri, H256, SDK};
 use helios::consensus::rpc::ConsensusRpc;
 use helios::consensus::{rpc::nimbus_rpc::NimbusRpc, Inner};
@@ -27,19 +27,29 @@ use jsonrpsee::{
     http_client::{HttpClient, HttpClientBuilder},
     rpc_params,
 };
-use log::{error, info};
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
 use sp1_sdk::{ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use ssz_rs::prelude::*;
 use std::env;
+use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use alloy::hex::ToHex;
 use tree_hash::TreeHash;
 
 use anyhow::Context;
+use tracing::info;
+
+use avail::vector::calls::types as VectorCalls;
+use avail::vector::events as VectorEvent;
+use avail_rust::avail::runtime_types::pallet_balances::types::AccountData;
+use avail_rust::subxt::backend::rpc::reconnecting_rpc_client::{ExponentialBackoff, RpcClient};
+use avail_rust::{
+    avail, error::ClientError, transactions::Transaction, utils, Nonce::BestBlockAndTxPool, Options,
+};
+use avail_rust::avail_core::currency::AVAIL;
+use jsonrpsee::tracing::error;
 
 const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
 
@@ -198,33 +208,60 @@ impl SP1AvailLightClientOperator {
         let secret_uri = SecretUri::from_str(secret.as_str()).unwrap();
         let account = Keypair::from_uri(&secret_uri).unwrap();
 
-        let p: BoundedVec<u8> = BoundedVec(
-            proof.bytes(),
-        );
-        let pub_values: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
+        let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
+        let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
 
-        let fulfill_call = avail::tx().vector().fulfill(p, pub_values);
+        let fulfill_call = avail::tx().vector().fulfill(proof_vec, pub_values_vec);
         let sdk = SDK::new(avail_rpc.as_str()).await.unwrap();
-        let params = AvailExtrinsicParamsBuilder::new().build();
-        let maybe_tx_progress = sdk
-            .api
-            .tx()
-            .sign_and_submit_then_watch(&fulfill_call, &account, params)
-            .await;
 
-        let transaction = sdk
-            .util
-            .progress_transaction(maybe_tx_progress, WaitFor::BlockFinalization)
-            .await;
+        let account_id = account.public_key().to_account_id();
+        let storage_query = avail::storage().system().account(account_id);
+        let best_block_hash = Block::fetch_best_block_hash(&sdk.rpc_client).await.expect("Must fetch fetch_best_block_hash!");
+        let storage = sdk.online_client.storage().at(best_block_hash);
+        let result = storage.fetch(&storage_query).await?;
+        if let Some(account) = result {
+            info!(
+                "token_amount" = account.data.free.checked_div(AVAIL),
+                "nonce" = account.nonce,
+                "Account info."
+            );
+        }
 
-        let tx_in_block = match transaction {
-            Ok(tx_in_block) => tx_in_block,
-            Err(message) => {
-                panic!("Error: {}", message);
-            }
-        };
+        let tx = Transaction::new(
+            sdk.online_client.clone(),
+            sdk.rpc_client.clone(),
+            fulfill_call,
+        );
+        let options = Some(Options::new().nonce(BestBlockAndTxPool));
+        let result = tx
+            .execute_wait_for_finalization(&account, options)
+            .await
+            .expect("Transaction must be executed!");
 
-        info!("Executed at block: {:?}", tx_in_block.block_hash());
+        let head_updated = result.find_event::<VectorEvent::HeadUpdated>();
+
+        info!(
+            "block_number" = result.block_number,
+            "block_hash" = format!("{:?}", result.block_hash),
+            "tx_hash" = format!("{:?}", result.tx_hash),
+            "Transaction sent"
+        );
+
+        if !head_updated.is_empty() {
+            info!(
+                "slot" = head_updated[0].slot,
+                "finalization_root" = format!("{:?}", head_updated[0].finalization_root),
+                "execution_state_root" = format!("{:?}", head_updated[0].execution_state_root),
+                "Head updated"
+            );
+        } else {
+            error!(
+                "block_number" = result.block_number,
+                "block_hash" = format!("{:?}", result.block_hash),
+                "tx_hash" = format!("{:?}", result.tx_hash),
+                "No head updated"
+            );
+        }
 
         Ok(())
     }
@@ -236,10 +273,7 @@ impl SP1AvailLightClientOperator {
         // loop {
         // Get the current slot from the contract
         let slot = self.get_head().await?;
-        // 6451165;
-
-        // let syc = self.get_sync_committee(slot).await?;
-        info!("Slot: {}", slot);
+        info!("Current slot: {}", slot);
 
         // Fetch the checkpoint at that slot
         let checkpoint = get_checkpoint(slot).await;
@@ -323,8 +357,8 @@ impl SP1AvailLightClientOperator {
                 "state_getStorage",
                 rpc_params![head_key, finalized_block_hash_str.clone()],
             )
-            .await.unwrap_or(H256::zero().encode_hex());
-        // .context("Cannot read SyncCommitteeHash from Avail chain")?;
+            .await
+            .unwrap_or(H256::zero().encode_hex());
 
         let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
             .context("parse sync_committee_hash")?;
@@ -349,6 +383,7 @@ async fn main() -> Result<()> {
     loop {
         if let Err(e) = operator.run(loop_delay_mins).await {
             error!("Error running operator: {}", e);
+            error!("Retrying: {}", e);
         }
     }
 }

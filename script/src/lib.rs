@@ -14,8 +14,8 @@ use serde::Deserialize;
 use sp1_helios_primitives::types::ExecutionStateProof;
 use ssz_rs::prelude::*;
 use std::sync::Arc;
-use log::info;
 use tokio::sync::{mpsc::channel, watch};
+use tracing::info;
 use tree_hash::TreeHash;
 
 /// Fetch updates for client
@@ -94,9 +94,11 @@ pub async fn get_client(checkpoint: B256) -> Inner<NimbusRpc> {
     let consensus_rpc = std::env::var("SOURCE_CONSENSUS_RPC_URL").unwrap();
     let chain_id = std::env::var("SOURCE_CHAIN_ID").unwrap();
 
-    info!("Source chain_id: {}", chain_id);
-    info!("consensus_rpc : {}", consensus_rpc);
-    info!("checkpoint : {:?}", checkpoint);
+    info!(
+        "chain_id" = chain_id,
+        "checkpoint" = format!("{:?}", checkpoint),
+        "Getting client"
+    );
 
     let network = Network::from_chain_id(chain_id.parse().unwrap()).unwrap();
     let base_config = network.to_base_config();

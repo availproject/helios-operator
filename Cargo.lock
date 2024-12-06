@@ -1804,13 +1804,16 @@ dependencies = [
 [[package]]
 name = "avail-rust"
 version = "0.1.0"
+source = "git+https://github.com/availproject/avail.git?branch=helios-sp1#f6d02451979ed4cf7beae9e4b70e5b56d3318561"
 dependencies = [
  "avail-core",
  "base58",
  "bounded-collections 0.2.2",
  "derive_more 1.0.0",
+ "env_logger",
  "hex",
  "kate-recovery",
+ "log",
  "parity-scale-codec 3.6.12",
  "primitive-types 0.13.1",
  "scale-info",
@@ -2326,6 +2329,20 @@ name = "bytemuck"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b37c88a63ffd85d15b406896cc343916d7cf57838a847b3a6f2ca5d39a5695a"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcfcc3cd946cb52f0bbfdbbcfa2f4e24f75ebb6c0e1002f7c25904fada18b9ec"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
 
 [[package]]
 name = "byteorder"
@@ -9835,7 +9852,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-377-ext",
@@ -9924,7 +9941,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9969,7 +9986,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.25.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "environmental",
  "parity-scale-codec 3.6.12",
@@ -10160,7 +10177,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "24.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -10219,7 +10236,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "Inflector",
  "expander",
@@ -10284,7 +10301,7 @@ source = "git+https://github.com/availproject/polkadot-sdk.git?tag=polkadot-1.7.
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 
 [[package]]
 name = "sp-storage"
@@ -10328,7 +10345,7 @@ dependencies = [
 [[package]]
 name = "sp-storage"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "impl-serde 0.5.0",
  "parity-scale-codec 3.6.12",
@@ -10377,7 +10394,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "parity-scale-codec 3.6.12",
  "tracing",
@@ -10478,7 +10495,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#a2ffae303e8b6c52cff720fb2f3e2019d65d91b4"
+source = "git+https://github.com/paritytech/polkadot-sdk#5ca726750da563c46449f9aa915296e6c6967e61"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -10652,7 +10669,6 @@ dependencies = [
  "env_logger",
  "helios",
  "jsonrpsee 0.20.4",
- "log",
  "reqwest 0.12.9",
  "serde",
  "serde_cbor",
@@ -10661,8 +10677,10 @@ dependencies = [
  "sp1-build",
  "sp1-helios-primitives",
  "sp1-sdk",
+ "sp1-verifier",
  "ssz_rs",
  "tokio",
+ "tracing",
  "tree_hash",
 ]
 
@@ -10942,6 +10960,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sp1-verifier"
+version = "3.3.0"
+source = "git+https://github.com/succinctlabs/sp1?tag=v3.3.0#3bbf4cff10b43f4e85d07d91535d719cfc046c8d"
+dependencies = [
+ "hex",
+ "lazy_static",
+ "sha2 0.10.8",
+ "substrate-bn-succinct",
+ "thiserror-no-std",
+]
+
+[[package]]
 name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11100,6 +11130,23 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "rustc-hex",
+]
+
+[[package]]
+name = "substrate-bn-succinct"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "114c855c26ad0594c830129cb868552fb41415603a6133276c2ecdd9e5ef4255"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "cfg-if",
+ "crunchy",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "rand 0.8.5",
+ "rustc-hex",
+ "sp1-lib",
 ]
 
 [[package]]
@@ -11728,9 +11775,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.12"
+version = "0.7.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
+checksum = "d7fcaa8d55a2bdd6b83ace262b016eca0d79ee02818c5c1bcdf0305114081078"
 dependencies = [
  "bytes",
  "futures-core",
