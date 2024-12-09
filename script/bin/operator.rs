@@ -44,11 +44,11 @@ use tracing::info;
 use avail::vector::calls::types as VectorCalls;
 use avail::vector::events as VectorEvent;
 use avail_rust::avail::runtime_types::pallet_balances::types::AccountData;
+use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::subxt::backend::rpc::reconnecting_rpc_client::{ExponentialBackoff, RpcClient};
 use avail_rust::{
     avail, error::ClientError, transactions::Transaction, utils, Nonce::BestBlockAndTxPool, Options,
 };
-use avail_rust::avail_core::currency::AVAIL;
 use jsonrpsee::tracing::error;
 
 const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
@@ -216,7 +216,9 @@ impl SP1AvailLightClientOperator {
 
         let account_id = account.public_key().to_account_id();
         let storage_query = avail::storage().system().account(account_id);
-        let best_block_hash = Block::fetch_best_block_hash(&sdk.rpc_client).await.expect("Must fetch fetch_best_block_hash!");
+        let best_block_hash = Block::fetch_best_block_hash(&sdk.rpc_client)
+            .await
+            .expect("Must fetch fetch_best_block_hash!");
         let storage = sdk.online_client.storage().at(best_block_hash);
         let result = storage.fetch(&storage_query).await?;
         if let Some(account) = result {
