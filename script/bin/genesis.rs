@@ -3,48 +3,20 @@ use alloy_primitives::Address;
 use anyhow::Result;
 /// Generate genesis parameters for light client contract
 use clap::Parser;
-use serde::{Deserialize, Serialize};
 use sp1_helios_script::{
-    get_checkpoint, get_client, get_execution_state_root_proof, get_latest_checkpoint,
+    find_project_root, get_checkpoint, get_client, get_execution_state_root_proof,
+    get_existing_genesis_config, get_latest_checkpoint, write_genesis_config, GenesisArgs,
+    HELIOS_ELF,
 };
 use sp1_sdk::{utils, HashableKey, ProverClient};
 use ssz_rs::prelude::*;
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::env;
+use std::path::PathBuf;
 use tracing::info;
 use tree_hash::TreeHash;
 
-const HELIOS_ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
-
-#[derive(Parser, Debug, Clone)]
-#[command(about = "Get the genesis parameters from a block.")]
-pub struct GenesisArgs {
-    #[arg(long)]
-    pub slot: Option<u64>,
-    #[arg(long, default_value = ".env")]
-    pub env_file: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenesisConfig {
-    pub execution_state_root: String,
-    pub genesis_time: u64,
-    pub genesis_validators_root: String,
-    pub guardian: String,
-    pub head: u64,
-    pub header: String,
-    pub helios_program_vkey: String,
-    pub seconds_per_slot: u64,
-    pub slots_per_epoch: u64,
-    pub slots_per_period: u64,
-    pub source_chain_id: u64,
-    pub sync_committee_hash: String,
-    pub verifier: String,
-}
-
+/// Script used to generate genesis configuration and initialize the light client.
+#[allow(dead_code)]
 #[tokio::main]
 pub async fn main() -> Result<()> {
     utils::setup_logger();
@@ -146,36 +118,6 @@ pub async fn main() -> Result<()> {
 
     write_genesis_config(&workspace_root, &genesis_config)?;
 
-    Ok(())
-}
-
-fn find_project_root() -> Option<PathBuf> {
-    let mut path = std::env::current_dir().ok()?;
-    while !path.join(".git").exists() {
-        if !path.pop() {
-            return None;
-        }
-    }
-    Some(path)
-}
-
-/// Get the existing genesis config from the contracts directory.
-fn get_existing_genesis_config(workspace_root: &Path) -> Result<GenesisConfig> {
-    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
-    let genesis_config_content = std::fs::read_to_string(genesis_config_path)?;
-    let genesis_config: GenesisConfig = serde_json::from_str(&genesis_config_content)?;
-    Ok(genesis_config)
-}
-
-/// Write the genesis config to the contracts directory.
-fn write_genesis_config(workspace_root: &Path, genesis_config: &GenesisConfig) -> Result<()> {
-    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
-    info!("Writing genesis config to {:?}", &genesis_config_path);
-    info!("Writing genesis data {:?}", &genesis_config);
-    fs::write(
-        genesis_config_path,
-        serde_json::to_string_pretty(&genesis_config)?,
-    )?;
     Ok(())
 }
 

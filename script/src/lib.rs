@@ -1,4 +1,5 @@
 use alloy_primitives::B256;
+use clap::Parser;
 use helios::{
     config::networks::Network,
     consensus::{
@@ -10,9 +11,12 @@ use helios::{
     prelude::*,
     types::Update,
 };
+use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use sp1_helios_primitives::types::ExecutionStateProof;
 use ssz_rs::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{mpsc::channel, watch};
 use tracing::info;
@@ -126,4 +130,67 @@ pub async fn get_client(checkpoint: B256) -> Inner<NimbusRpc> {
 
     client.bootstrap(checkpoint).await.unwrap();
     client
+}
+
+// Genesis config
+pub const HELIOS_ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
+
+#[derive(Parser, Debug, Clone)]
+#[command(about = "Get the genesis parameters from a block.")]
+pub struct GenesisArgs {
+    #[arg(long)]
+    pub slot: Option<u64>,
+    #[arg(long, default_value = ".env")]
+    pub env_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenesisConfig {
+    pub execution_state_root: String,
+    pub genesis_time: u64,
+    pub genesis_validators_root: String,
+    pub guardian: String,
+    pub head: u64,
+    pub header: String,
+    pub helios_program_vkey: String,
+    pub seconds_per_slot: u64,
+    pub slots_per_epoch: u64,
+    pub slots_per_period: u64,
+    pub source_chain_id: u64,
+    pub sync_committee_hash: String,
+    pub verifier: String,
+}
+
+pub fn find_project_root() -> Option<PathBuf> {
+    let mut path = std::env::current_dir().ok()?;
+    while !path.join(".git").exists() {
+        if !path.pop() {
+            return None;
+        }
+    }
+    Some(path)
+}
+
+/// Get the existing genesis config from the contracts directory.
+pub fn get_existing_genesis_config(workspace_root: &Path) -> anyhow::Result<GenesisConfig> {
+    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
+    let genesis_config_content = std::fs::read_to_string(genesis_config_path)?;
+    let genesis_config: GenesisConfig = serde_json::from_str(&genesis_config_content)?;
+    Ok(genesis_config)
+}
+
+/// Write the genesis config to the contracts directory.
+pub fn write_genesis_config(
+    workspace_root: &Path,
+    genesis_config: &GenesisConfig,
+) -> anyhow::Result<()> {
+    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
+    info!("Writing genesis config to {:?}", &genesis_config_path);
+    info!("Writing genesis data {:?}", &genesis_config);
+    fs::write(
+        genesis_config_path,
+        serde_json::to_string_pretty(&genesis_config)?,
+    )?;
+    Ok(())
 }

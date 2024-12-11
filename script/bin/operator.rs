@@ -2,16 +2,13 @@ mod genesis;
 
 use alloy::hex::ToHex;
 /// Continuously generate proofs & keep light client updated with chain
-use alloy::{
-    hex,
-    sol,
-};
+use alloy::{hex, sol};
 use anyhow::Result;
+use avail::vector::events as VectorEvent;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::{Block};
+use avail_rust::Block;
 use avail_rust::{Keypair, SecretUri, H256, SDK};
-use avail::vector::events as VectorEvent;
 use helios::consensus::rpc::ConsensusRpc;
 use helios::consensus::{rpc::nimbus_rpc::NimbusRpc, Inner};
 use jsonrpsee::{
@@ -31,13 +28,10 @@ use anyhow::Context;
 use tracing::info;
 
 use avail_rust::avail_core::currency::AVAIL;
-use avail_rust::{
-    avail, transactions::Transaction, Nonce::BestBlockAndTxPool, Options,
-};
+use avail_rust::{avail, transactions::Transaction, Nonce::BestBlockAndTxPool, Options};
 use jsonrpsee::tracing::error;
 
 const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
-
 
 struct SP1AvailLightClientOperator {
     client: ProverClient,
