@@ -348,7 +348,7 @@ impl SP1AvailLightClientOperator {
             "0x{}{}{}",
             hex::encode(twox_128(pallet.as_bytes())),
             hex::encode(twox_128(sync_committee_hash.as_bytes())),
-            hex::encode(&period.to_le_bytes())
+            hex::encode(period.to_le_bytes())
         );
 
         info!("Period {}", period);
