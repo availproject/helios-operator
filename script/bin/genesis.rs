@@ -1,4 +1,3 @@
-use alloy::hex;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
 use anyhow::Result;
@@ -9,8 +8,6 @@ use sp1_helios_script::{
     get_checkpoint, get_client, get_execution_state_root_proof, get_latest_checkpoint,
 };
 use sp1_sdk::{utils, HashableKey, ProverClient};
-use sp1_verifier::{Groth16Verifier, GROTH16_VK_BYTES};
-use sp_core::H256;
 use ssz_rs::prelude::*;
 use std::{
     env, fs,

@@ -4,22 +4,14 @@ use alloy::hex::ToHex;
 /// Continuously generate proofs & keep light client updated with chain
 use alloy::{
     hex,
-    network::{Ethereum, EthereumWallet},
-    primitives::Address,
-    providers::{
-        fillers::{ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller},
-        Identity, Provider, ProviderBuilder, RootProvider,
-    },
-    signers::local::PrivateKeySigner,
     sol,
-    transports::http::{Client, Http},
 };
-use alloy_primitives::{B256, U256};
 use anyhow::Result;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::{AOnlineClient, Block, WaitFor};
-use avail_rust::{AvailExtrinsicParamsBuilder, Keypair, SecretUri, H256, SDK};
+use avail_rust::{Block};
+use avail_rust::{Keypair, SecretUri, H256, SDK};
+use avail::vector::events as VectorEvent;
 use helios::consensus::rpc::ConsensusRpc;
 use helios::consensus::{rpc::nimbus_rpc::NimbusRpc, Inner};
 use jsonrpsee::{
@@ -32,38 +24,20 @@ use sp1_helios_script::*;
 use sp1_sdk::{ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use ssz_rs::prelude::*;
 use std::env;
-use std::hash::Hash;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
 use tree_hash::TreeHash;
 
 use anyhow::Context;
 use tracing::info;
 
-use avail::vector::calls::types as VectorCalls;
-use avail::vector::events as VectorEvent;
-use avail_rust::avail::runtime_types::pallet_balances::types::AccountData;
 use avail_rust::avail_core::currency::AVAIL;
-use avail_rust::subxt::backend::rpc::reconnecting_rpc_client::{ExponentialBackoff, RpcClient};
 use avail_rust::{
-    avail, error::ClientError, transactions::Transaction, utils, Nonce::BestBlockAndTxPool, Options,
+    avail, transactions::Transaction, Nonce::BestBlockAndTxPool, Options,
 };
 use jsonrpsee::tracing::error;
 
 const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
 
-/// Alias the fill provider for the Ethereum network. Retrieved from the instantiation of the
-/// ProviderBuilder. Recommended method for passing around a ProviderBuilder.
-type EthereumFillProvider = FillProvider<
-    JoinFill<
-        JoinFill<JoinFill<JoinFill<Identity, GasFiller>, NonceFiller>, ChainIdFiller>,
-        WalletFiller<EthereumWallet>,
-    >,
-    RootProvider<Http<Client>>,
-    Http<Client>,
-    Ethereum,
->;
 
 struct SP1AvailLightClientOperator {
     client: ProverClient,
@@ -272,35 +246,33 @@ impl SP1AvailLightClientOperator {
     async fn run(&mut self, loop_delay_mins: u64) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
-        // loop {
-        // Get the current slot from the contract
-        let slot = self.get_head().await?;
-        info!("Current slot: {}", slot);
+        loop {
+            // Get the current slot from the contract
+            let slot = self.get_head().await?;
+            info!("Current slot: {}", slot);
 
-        // Fetch the checkpoint at that slot
-        let checkpoint = get_checkpoint(slot).await;
+            // Fetch the checkpoint at that slot
+            let checkpoint = get_checkpoint(slot).await;
 
-        // Get the client from the checkpoint
-        let client = get_client(checkpoint).await;
+            // Get the client from the checkpoint
+            let client = get_client(checkpoint).await;
 
-        // Request an update
-        match self.request_update(client).await {
-            Ok(Some(proof)) => {
-                self.relay_vector_update(proof).await?;
-            }
-            Ok(None) => {
-                // Contract is up to date. Nothing to update.
-            }
-            Err(e) => {
-                error!("Header range request failed: {}", e);
-            }
-        };
+            // Request an update
+            match self.request_update(client).await {
+                Ok(Some(proof)) => {
+                    self.relay_vector_update(proof).await?;
+                }
+                Ok(None) => {
+                    // Contract is up to date. Nothing to update.
+                }
+                Err(e) => {
+                    error!("Header range request failed: {}", e);
+                }
+            };
 
-        // info!("Sleeping for {:?} minutes", loop_delay_mins);
-        // tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
-        // }
-
-        Ok(())
+            info!("Sleeping for {:?} minutes", loop_delay_mins);
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
+        }
     }
 
     // Reads head from the Avail chain

@@ -7,7 +7,7 @@ authors.workspace = true
 
 [[bin]]
 name = "genesis"
-path = "./bin/genesis.rs"
+path = "bin/genesis.rs"
 
 [[bin]]
 name = "operator"
