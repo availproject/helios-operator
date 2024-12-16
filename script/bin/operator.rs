@@ -165,7 +165,7 @@ impl SP1AvailLightClientOperator {
 
     /// Relay the proof to Avail
     async fn relay_vector_update(&self, proof: SP1ProofWithPublicValues) -> Result<()> {
-        let proof_as_bytes = if env::var("SP1_PROVER").unwrap().to_lowercase() == "mock" {
+        let proof_as_bytes = if env::var("SP1_PROVER")?.to_lowercase() == "mock" {
             vec![]
         } else {
             proof.bytes()
@@ -173,8 +173,8 @@ impl SP1AvailLightClientOperator {
 
         let secret = env::var("AVAIL_SECRET").unwrap_or("//Alice".to_string());
         let avail_rpc = env::var("AVAIL_WS_RPC").unwrap_or("ws://127.0.0.1:9944".to_string());
-        let secret_uri = SecretUri::from_str(secret.as_str()).unwrap();
-        let account = Keypair::from_uri(&secret_uri).unwrap();
+        let secret_uri = SecretUri::from_str(secret.as_str())?;
+        let account = Keypair::from_uri(&secret_uri)?;
 
         let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
         let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
