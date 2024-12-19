@@ -261,6 +261,8 @@ impl SP1AvailLightClientOperator {
                 }
                 Err(e) => {
                     error!("Header range request failed: {}", e);
+                    info!("Retrying...");
+                    continue;
                 }
             };
 
