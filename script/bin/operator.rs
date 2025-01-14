@@ -1,9 +1,4 @@
-use alloy::providers::Provider;
-use alloy::{
-    network::EthereumWallet, primitives::Address, providers::ProviderBuilder,
-    signers::local::PrivateKeySigner, sol,
-};
-use alloy_primitives::{B256, U256};
+use alloy::sol;
 use anyhow::{Context, Result};
 use avail::vector::events as VectorEvent;
 use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
@@ -11,7 +6,6 @@ use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
-use alloy::hex::ToHex;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
@@ -24,13 +18,13 @@ use jsonrpsee::{
     http_client::{HttpClient, HttpClientBuilder},
     rpc_params,
 };
-use reqwest::Url;
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
 use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
+use alloy::hex::ToHexExt;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
