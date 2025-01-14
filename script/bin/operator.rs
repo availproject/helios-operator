@@ -1,40 +1,42 @@
-mod genesis;
+use alloy::providers::Provider;
+use alloy::{
+    network::EthereumWallet, primitives::Address, providers::ProviderBuilder,
+    signers::local::PrivateKeySigner, sol,
+};
+use alloy_primitives::{B256, U256};
+use anyhow::{Context, Result};
+use avail::vector::events as VectorEvent;
+use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
+use helios_ethereum::consensus::Inner;
+use helios_ethereum::rpc::http_rpc::HttpRpc;
+use helios_ethereum::rpc::ConsensusRpc;
 
 use alloy::hex::ToHex;
-/// Continuously generate proofs & keep light client updated with chain
-use alloy::{hex, sol};
-use anyhow::Result;
-use avail::vector::events as VectorEvent;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
+use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::Block;
-use avail_rust::{Keypair, SecretUri, H256, SDK};
-use helios::consensus::rpc::ConsensusRpc;
-use helios::consensus::{rpc::nimbus_rpc::NimbusRpc, Inner};
+use avail_rust::transactions::Transaction;
+use avail_rust::Nonce::BestBlockAndTxPool;
+use avail_rust::{avail, Block, Keypair, Options, SecretUri, H256, SDK};
+use jsonrpsee::tracing::{error, info};
 use jsonrpsee::{
     core::client::ClientT,
     http_client::{HttpClient, HttpClientBuilder},
     rpc_params,
 };
+use reqwest::Url;
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
-use ssz_rs::prelude::*;
+use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use tree_hash::TreeHash;
 
-use anyhow::Context;
-use tracing::info;
-
-use avail_rust::avail_core::currency::AVAIL;
-use avail_rust::{avail, transactions::Transaction, Nonce::BestBlockAndTxPool, Options};
-use jsonrpsee::tracing::error;
-
-const ELF: &[u8] = include_bytes!("../../elf/riscv32im-succinct-zkvm-elf");
+const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 
 struct SP1AvailLightClientOperator {
-    client: ProverClient,
+    client: EnvProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -42,7 +44,7 @@ struct SP1AvailLightClientOperator {
 sol! {
     #[allow(missing_docs)]
     #[sol(rpc)]
-    contract SP1LightClient {
+    contract SP1Helios {
         bytes32 public immutable GENESIS_VALIDATORS_ROOT;
         uint256 public immutable GENESIS_TIME;
         uint256 public immutable SECONDS_PER_SLOT;
@@ -81,7 +83,7 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").unwrap_or("http://127.0.0.1:9944/api".to_string());
 
-        let client = ProverClient::new();
+        let client = ProverClient::from_env();
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
             .build(avail_rpc)
@@ -96,9 +98,10 @@ impl SP1AvailLightClientOperator {
     }
 
     /// Fetch values and generate an 'update' proof for the SP1 LightClient contract.
+    /// Fetch values and generate an 'update' proof for the SP1 Helios contract.
     async fn request_update(
         &mut self,
-        mut client: Inner<NimbusRpc>,
+        mut client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
         let head: u64 = self.get_head().await?;
         let slot_per_period = env::var("SLOTS_PER_PERIOD")
@@ -112,13 +115,14 @@ impl SP1AvailLightClientOperator {
         let mut stdin = SP1Stdin::new();
 
         // Setup client.
-        let mut updates = get_updates(&client).await;
+        // Setup client.
+        let mut sync_committee_updates = get_updates(&client).await;
         let finality_update = client.rpc.get_finality_update().await.unwrap();
 
         // Check if contract is up to date
-        let latest_block = finality_update.finalized_header.beacon.slot;
+        let latest_block = finality_update.finalized_header.beacon().slot;
         if latest_block <= head {
-            info!("Contract is up to date. Nothing to update.");
+            log::info!("Contract is up to date. Nothing to update.");
             return Ok(None);
         }
 
@@ -126,40 +130,40 @@ impl SP1AvailLightClientOperator {
         // Skip processing update inside program if next_sync_committee is already stored in contract.
         // We must still apply the update locally to "sync" the helios client, this is due to
         // next_sync_committee not being stored when the helios client is bootstrapped.
-        if !updates.is_empty() {
-            let next_sync_committee =
-                H256::from_slice(updates[0].next_sync_committee.tree_hash_root().as_ref());
+        if !sync_committee_updates.is_empty() {
+            let next_sync_committee = H256::from_slice(
+                sync_committee_updates[0]
+                    .next_sync_committee
+                    .tree_hash_root()
+                    .as_ref(),
+            );
 
             if contract_next_sync_committee == next_sync_committee {
-                info!("Applying optimization, skipping update");
-                let temp_update = updates.remove(0);
+                println!("Applying optimization, skipping update");
+                let temp_update = sync_committee_updates.remove(0);
 
                 client.verify_update(&temp_update).unwrap(); // Panics if not valid
                 client.apply_update(&temp_update);
             }
         }
 
-        // Fetch execution state proof
-        let execution_state_proof = get_execution_state_root_proof(latest_block).await.unwrap();
-
         // Create program inputs
         let expected_current_slot = client.expected_current_slot();
         let inputs = ProofInputs {
-            updates,
+            sync_committee_updates,
             finality_update,
             expected_current_slot,
             store: client.store.clone(),
             genesis_root: client.config.chain.genesis_root,
             forks: client.config.forks.clone(),
-            execution_state_proof,
         };
         let encoded_proof_inputs = serde_cbor::to_vec(&inputs)?;
         stdin.write_slice(&encoded_proof_inputs);
 
         // Generate proof.
-        let proof = self.client.prove(&self.pk, stdin).groth16().run()?;
+        let proof = self.client.prove(&self.pk, &stdin).groth16().run()?;
 
-        info!("Attempting to update to new head block: {:?}", latest_block);
+        log::info!("Attempting to update to new head block: {:?}", latest_block);
         Ok(Some(proof))
     }
 
@@ -242,6 +246,7 @@ impl SP1AvailLightClientOperator {
 
         loop {
             // Get the current slot from the contract
+            let start = Instant::now();
             let slot = self.get_head().await?;
             info!("Current slot: {}", slot);
 
@@ -265,6 +270,9 @@ impl SP1AvailLightClientOperator {
                     continue;
                 }
             };
+            let duration = start.elapsed();
+
+            info!("duration" = duration.as_secs(), "Loop finished");
 
             info!("Sleeping for {:?} minutes", loop_delay_mins);
             tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
@@ -295,10 +303,11 @@ impl SP1AvailLightClientOperator {
                 rpc_params![head_key, finalized_block_hash_str.clone()],
             )
             .await
-            .context("Cannot parse head from Avail chain")?;
+            .context("Cannot parse head from Avail chain")
+            .unwrap_or("0".to_string());
 
-        let slot_from_hex = sp_core::bytes::from_hex(head_str.as_str()).context("decode slot")?;
-        let slot: u64 = Decode::decode(&mut slot_from_hex.as_slice()).context("slot decode 2")?;
+        let slot_from_hex = sp_core::bytes::from_hex(head_str.as_str()).unwrap_or(vec![0u8; 32]);
+        let slot: u64 = Decode::decode(&mut slot_from_hex.as_slice()).unwrap_or(6559328);
         Ok(slot)
     }
 
@@ -353,7 +362,6 @@ async fn main() -> Result<()> {
     loop {
         if let Err(e) = operator.run(loop_delay_mins).await {
             error!("Error running operator: {}", e);
-            error!("Retrying: {}", e);
         }
     }
 }

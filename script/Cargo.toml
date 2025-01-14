@@ -7,26 +7,27 @@ authors.workspace = true
 
 [[bin]]
 name = "genesis"
-path = "bin/genesis.rs"
+path = "./bin/genesis.rs"
 
 [[bin]]
 name = "operator"
-path = "bin/operator.rs"
+path = "./bin/operator.rs"
 
-#[[bin]]
-#name = "test"
-#path = "./bin/test.rs"
+[[bin]]
+name = "vkey"
+path = "./bin/vkey.rs"
 
 [dependencies]
 dotenv = { workspace = true }
 sp1-sdk = { workspace = true }
 tokio = { workspace = true }
-helios = { workspace = true }
+helios-consensus-core = { workspace = true }
+helios-ethereum = { workspace = true }
 sp1-helios-primitives = { workspace = true }
 serde = { workspace = true }
-ssz-rs = { workspace = true }
 serde_cbor = { workspace = true }
 clap = { workspace = true }
+log = { workspace = true }
 env_logger = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy = { workspace = true }
@@ -35,12 +36,10 @@ cargo_metadata = { workspace = true }
 reqwest = { workspace = true }
 tree_hash = { workspace = true }
 serde_json = { workspace = true }
-tracing = {workspace = true}
-sp1-verifier = {workspace = true}
-
+hex = { workspace = true }
 avail-rust = { workspace = true }
-#avail-core={ workspace = true }
-jsonrpsee = { workspace = true }
 sp-core = { workspace = true }
+jsonrpsee = {workspace = true}
+
 [build-dependencies]
 sp1-build = { workspace = true }
