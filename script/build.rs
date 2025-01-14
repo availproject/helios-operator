@@ -1,4 +1,11 @@
 #[allow(unused_imports)]
 use sp1_build::{build_program_with_args, BuildArgs};
 
-fn main() {}
+fn main() {
+    // build_program_with_args("../program", BuildArgs {
+    //     tag: "v4.0.0-rc.3".to_string(),
+    //     docker: true,
+    //     elf_name: Some("sp1-helios-elf-1".to_string()),
+    //     ..Default::default()
+    // });
+}

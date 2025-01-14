@@ -11,3 +11,7 @@ To run the operator make sure you have the correct .env file described in .env.e
 ```
 cargo run --bin operator
 ```
+To generate elf from a program run:
+```
+cargo prove build --docker --tag v4.0.0-rc.3 --elf-name sp1-helios-elf 
+```
