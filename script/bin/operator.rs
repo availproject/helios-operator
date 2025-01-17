@@ -300,8 +300,9 @@ impl SP1AvailLightClientOperator {
             .context("Cannot parse head from Avail chain")
             .unwrap_or("0".to_string());
 
+        // head cannot be zero on a chain
         let slot_from_hex = sp_core::bytes::from_hex(head_str.as_str()).unwrap_or(vec![0u8; 32]);
-        let slot: u64 = Decode::decode(&mut slot_from_hex.as_slice()).unwrap_or(6559328);
+        let slot: u64 = Decode::decode(&mut slot_from_hex.as_slice()).unwrap_or(6775648_u64);
         Ok(slot)
     }
 
@@ -322,7 +323,7 @@ impl SP1AvailLightClientOperator {
             hex::encode(period.to_le_bytes())
         );
 
-        info!("Period {}", period);
+        info!("Period + 1 {}", period);
 
         let sync_committee_hash: String = self
             .avail_client
