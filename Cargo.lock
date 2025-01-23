@@ -2103,7 +2103,7 @@ dependencies = [
 [[package]]
 name = "avail-rust"
 version = "0.1.0"
-source = "git+https://github.com/availproject/avail.git?branch=helios-sp1#0b04c48d897bc4857ffeadac1eb8151a9ec129ac"
+source = "git+https://github.com/availproject/avail.git?rev=305e82ef4d5b758e7046050c5ad11eae1ce7ad94#305e82ef4d5b758e7046050c5ad11eae1ce7ad94"
 dependencies = [
  "avail-core",
  "base58",

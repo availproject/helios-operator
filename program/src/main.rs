@@ -55,7 +55,7 @@ pub fn main() {
         genesis_root,
         &forks,
     )
-        .is_ok();
+    .is_ok();
     if !finality_update_is_valid {
         panic!("Finality update is invalid!");
     }

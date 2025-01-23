@@ -44,7 +44,7 @@ tree_hash = "0.7.0"
 serde_with = { version = "3.4.0", features = ["hex"] }
 cargo_metadata = "0.18"
 
-avail-rust = { git = "https://github.com/availproject/avail.git", branch = "helios-sp1" }
+avail-rust = { git = "https://github.com/availproject/avail.git", rev = "305e82ef4d5b758e7046050c5ad11eae1ce7ad94" }
 jsonrpsee = { version = "0.20", features = ["http-client", "macros", "async-client"] }
 sp-core = { version = "21.0.0" }
 

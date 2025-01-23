@@ -1,4 +1,4 @@
-use alloy::signers::local::PrivateKeySigner;
+//use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
 use anyhow::Result;
 /// Generate genesis parameters for light client contract
@@ -133,7 +133,7 @@ pub async fn main() -> Result<()> {
     genesis_config.verifier = format!("0x{:x}", verifier);
 
     // Get the account associated with the private key.
-    let private_key = env::var("PRIVATE_KEY").unwrap();
+    /*    let private_key = env::var("PRIVATE_KEY").unwrap();
     let signer: PrivateKeySigner = private_key.parse().expect("Failed to parse private key");
     let deployer_address = signer.address();
 
@@ -144,7 +144,7 @@ pub async fn main() -> Result<()> {
         _ => format!("0x{:x}", deployer_address),
     };
 
-    genesis_config.guardian = guardian;
+    genesis_config.guardian = guardian;*/
 
     write_genesis_config(&workspace_root, &genesis_config)?;
 
