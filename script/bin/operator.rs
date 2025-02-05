@@ -235,6 +235,7 @@ impl SP1AvailLightClientOperator {
                 "tx_hash" = format!("{:?}", result.tx_hash),
                 "No head updated"
             );
+            error!("Failed transaction result: {:?}", result)
         }
 
         Ok(())
