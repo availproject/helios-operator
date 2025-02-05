@@ -75,13 +75,14 @@ impl SP1AvailLightClientOperator {
     pub async fn new() -> Self {
         dotenv::dotenv().ok();
 
-        let avail_rpc = env::var("AVAIL_RPC").unwrap_or("http://127.0.0.1:9944/api".to_string());
+        let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
         let client = ProverClient::from_env();
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
             .build(avail_rpc)
-            .unwrap();
+            .expect("Could not create RPC client");
+
         let (pk, _) = client.setup(ELF);
 
         Self {
@@ -91,7 +92,6 @@ impl SP1AvailLightClientOperator {
         }
     }
 
-    /// Fetch values and generate an 'update' proof for the SP1 LightClient contract.
     /// Fetch values and generate an 'update' proof for the SP1 Helios contract.
     async fn request_update(
         &mut self,
@@ -109,9 +109,12 @@ impl SP1AvailLightClientOperator {
         let mut stdin = SP1Stdin::new();
 
         // Setup client.
-        // Setup client.
         let mut sync_committee_updates = get_updates(&client).await;
-        let finality_update = client.rpc.get_finality_update().await.unwrap();
+        let finality_update = client
+            .rpc
+            .get_finality_update()
+            .await
+            .expect("RPC get_finality_update failed");
 
         // Check if contract is up to date
         let latest_block = finality_update.finalized_header.beacon().slot;
@@ -136,7 +139,9 @@ impl SP1AvailLightClientOperator {
                 println!("Applying optimization, skipping update");
                 let temp_update = sync_committee_updates.remove(0);
 
-                client.verify_update(&temp_update).unwrap(); // Panics if not valid
+                client
+                    .verify_update(&temp_update)
+                    .expect("Verify update validation error!");
                 client.apply_update(&temp_update);
             }
         }
@@ -169,8 +174,8 @@ impl SP1AvailLightClientOperator {
             proof.bytes()
         };
 
-        let secret = env::var("AVAIL_SECRET").unwrap_or("//Alice".to_string());
-        let avail_rpc = env::var("AVAIL_WS_RPC").unwrap_or("ws://127.0.0.1:9944".to_string());
+        let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
+        let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
         let secret_uri = SecretUri::from_str(secret.as_str())?;
         let account = Keypair::from_uri(&secret_uri)?;
 
@@ -178,7 +183,9 @@ impl SP1AvailLightClientOperator {
         let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
 
         let fulfill_call = avail::tx().vector().fulfill(proof_vec, pub_values_vec);
-        let sdk = SDK::new(avail_rpc.as_str()).await.unwrap();
+        let sdk = SDK::new(avail_rpc.as_str())
+            .await
+            .expect("Could not create SDK!");
 
         let account_id = account.public_key().to_account_id();
         let storage_query = avail::storage().system().account(account_id);
@@ -298,11 +305,13 @@ impl SP1AvailLightClientOperator {
             )
             .await
             .context("Cannot parse head from Avail chain")
-            .unwrap_or("0".to_string());
+            .expect("Head must exist");
 
         // head cannot be zero on a chain
-        let slot_from_hex = sp_core::bytes::from_hex(head_str.as_str()).unwrap_or(vec![0u8; 32]);
-        let slot: u64 = Decode::decode(&mut slot_from_hex.as_slice()).unwrap_or(6867616_u64);
+        let slot_from_hex =
+            sp_core::bytes::from_hex(head_str.as_str()).expect("Must read slot from hex!");
+        let slot: u64 =
+            Decode::decode(&mut slot_from_hex.as_slice()).expect("Must decode slot from hex!");
         Ok(slot)
     }
 
@@ -332,7 +341,7 @@ impl SP1AvailLightClientOperator {
                 rpc_params![head_key, finalized_block_hash_str.clone()],
             )
             .await
-            .unwrap_or(H256::zero().encode_hex());
+            .expect("Must fetch sync_committee_hash!");
 
         let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
             .context("parse sync_committee_hash")?;
