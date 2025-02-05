@@ -6,7 +6,6 @@ use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
-use alloy::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
