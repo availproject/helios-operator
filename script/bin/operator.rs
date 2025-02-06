@@ -70,6 +70,7 @@ sol! {
     }
 }
 
+/// Implementation of the avail light clien operator that relays transactions to the Avail
 impl SP1AvailLightClientOperator {
     pub async fn new() -> Self {
         dotenv::dotenv().ok();
@@ -96,6 +97,7 @@ impl SP1AvailLightClientOperator {
         &mut self,
         mut client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
+        // head is initialised
         let head: u64 = self.get_head().await?;
         let slot_per_period = env::var("SLOTS_PER_PERIOD")
             .unwrap_or("8192".to_string())
@@ -158,9 +160,10 @@ impl SP1AvailLightClientOperator {
         let encoded_proof_inputs = serde_cbor::to_vec(&inputs)?;
         stdin.write_slice(&encoded_proof_inputs);
 
+        info!("Generate proof start");
         // Generate proof.
         let proof = self.client.prove(&self.pk, &stdin).groth16().run()?;
-
+        info!("Generate proof end");
         log::info!("Attempting to update to new head block: {:?}", latest_block);
         Ok(Some(proof))
     }
@@ -266,7 +269,7 @@ impl SP1AvailLightClientOperator {
                     // Contract is up to date. Nothing to update.
                 }
                 Err(e) => {
-                    error!("Header range request failed: {}", e);
+                    error!("Request for update failed: {}", e);
                     info!("Retrying...");
                     continue;
                 }
@@ -280,7 +283,7 @@ impl SP1AvailLightClientOperator {
         }
     }
 
-    // Reads head from the Avail chain
+    /// get_head reads head from the Avail chain
     async fn get_head(&mut self) -> Result<u64> {
         let pallet = "Vector";
         let head = "Head";
@@ -307,7 +310,7 @@ impl SP1AvailLightClientOperator {
             .context("Cannot parse head from Avail chain")
             .expect("Head must exist");
 
-        // head cannot be zero on a chain
+        // head cannot be zero on a chain as it is already populated
         let slot_from_hex =
             sp_core::bytes::from_hex(head_str.as_str()).expect("Must read slot from hex!");
         let slot: u64 =
@@ -315,6 +318,7 @@ impl SP1AvailLightClientOperator {
         Ok(slot)
     }
 
+    /// get_sync_committee reads sync committee hash from a chain so it can use later to apply updates
     async fn get_sync_committee(&mut self, period: u64) -> Result<H256> {
         let pallet = "Vector";
         let sync_committee_hash = "SyncCommitteeHashes";
@@ -325,24 +329,25 @@ impl SP1AvailLightClientOperator {
             .await
             .expect("finalized head");
 
-        let head_key = format!(
+        let sync_committee_key = format!(
             "0x{}{}{}",
             hex::encode(twox_128(pallet.as_bytes())),
             hex::encode(twox_128(sync_committee_hash.as_bytes())),
             hex::encode(period.to_le_bytes())
         );
 
-        info!("Period + 1 {}", period);
+        info!("Next period (current_period + 1) {}", period);
 
         let sync_committee_hash: String = self
             .avail_client
             .request(
                 "state_getStorage",
-                rpc_params![head_key, finalized_block_hash_str.clone()],
+                rpc_params![sync_committee_key, finalized_block_hash_str.clone()],
             )
             .await
             .expect("Must fetch sync_committee_hash!");
 
+        // sync committee must be initialized for the start period
         let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
             .context("parse sync_committee_hash")?;
         let hash: H256 = Decode::decode(&mut sync_committee_hash.as_slice())
