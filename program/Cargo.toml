@@ -12,4 +12,3 @@ serde_cbor = { workspace = true }
 sp1-helios-primitives = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
-tree_hash = { workspace = true }

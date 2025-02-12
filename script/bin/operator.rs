@@ -118,7 +118,7 @@ impl SP1AvailLightClientOperator {
             .expect("RPC get_finality_update failed");
 
         // Check if contract is up to date
-        let latest_block = finality_update.finalized_header.beacon().slot;
+        let latest_block = finality_update.finalized_header().beacon().slot;
         if latest_block <= head {
             log::info!("Contract is up to date. Nothing to update.");
             return Ok(None);
@@ -131,7 +131,7 @@ impl SP1AvailLightClientOperator {
         if !sync_committee_updates.is_empty() {
             let next_sync_committee = H256::from_slice(
                 sync_committee_updates[0]
-                    .next_sync_committee
+                    .next_sync_committee()
                     .tree_hash_root()
                     .as_ref(),
             );
