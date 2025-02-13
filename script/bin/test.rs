@@ -5,7 +5,6 @@ use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::{get_checkpoint, get_client, get_latest_checkpoint, get_updates};
 use sp1_sdk::{utils::setup_logger, ProverClient, SP1Stdin};
 
-const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Get the genesis parameters from a block.")]
 pub struct GenesisArgs {
@@ -13,6 +12,7 @@ pub struct GenesisArgs {
     pub slot: Option<u64>,
 }
 
+const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();

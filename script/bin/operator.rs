@@ -23,9 +23,7 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    EnvProver, HashableKey, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::{EnvProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
