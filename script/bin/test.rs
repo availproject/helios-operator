@@ -13,6 +13,7 @@ pub struct GenesisArgs {
 }
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
+#[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();

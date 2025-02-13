@@ -23,7 +23,7 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{EnvProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
@@ -378,13 +378,20 @@ async fn main() -> Result<()> {
     }
 }
 
-#[test]
-fn test_program_verification_key() {
-    let client = ProverClient::builder().cpu().build();
-    let (_pk, vk) = client.setup(ELF);
+#[cfg(test)]
+mod tests {
+    use crate::ELF;
+    use sp1_sdk::Prover;
+    use sp1_sdk::{HashableKey, ProverClient};
 
-    assert_eq!(
-        "0x00c6000f201752d6416f919795344ba2638221e7a9b63b9522f98f0f81020a53",
-        vk.bytes32()
-    );
+    #[test]
+    fn test_program_verification_key() {
+        let client = ProverClient::builder().cpu().build();
+        let (_pk, vk) = client.setup(ELF);
+
+        assert_eq!(
+            "0x00c6000f201752d6416f919795344ba2638221e7a9b63b9522f98f0f81020a53",
+            vk.bytes32()
+        );
+    }
 }
