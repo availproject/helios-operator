@@ -161,17 +161,17 @@ fn find_project_root() -> Option<PathBuf> {
     Some(path)
 }
 
-/// Get the existing genesis config from the contracts directory.
+/// Get the existing genesis config from the genesis directory.
 fn get_existing_genesis_config(workspace_root: &Path) -> Result<GenesisConfig> {
-    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
+    let genesis_config_path = workspace_root.join("genesis").join("genesis.json");
     let genesis_config_content = std::fs::read_to_string(genesis_config_path)?;
     let genesis_config: GenesisConfig = serde_json::from_str(&genesis_config_content)?;
     Ok(genesis_config)
 }
 
-/// Write the genesis config to the contracts directory.
+/// Write the genesis config to the genesis directory.
 fn write_genesis_config(workspace_root: &Path, genesis_config: &GenesisConfig) -> Result<()> {
-    let genesis_config_path = workspace_root.join("contracts").join("genesis.json");
+    let genesis_config_path = workspace_root.join("genesis").join("genesis.json");
     fs::write(
         genesis_config_path,
         serde_json::to_string_pretty(&genesis_config)?,

@@ -31,3 +31,6 @@ jobs:
       with:
         command: clippy
         args: --workspace -- -D warnings
+
+    - name: Tests
+      run: cargo test --release --workspace
