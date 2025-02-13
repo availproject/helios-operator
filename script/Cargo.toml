@@ -13,6 +13,11 @@ path = "./bin/genesis.rs"
 name = "operator"
 path = "./bin/operator.rs"
 
+[[bin]]
+name = "test"
+path = "./bin/test.rs"
+
+
 [dependencies]
 dotenv = { workspace = true }
 sp1-sdk = { workspace = true }
