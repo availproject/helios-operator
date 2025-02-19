@@ -27,6 +27,7 @@ use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, 
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
+use alloy::hex::ToHex;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
@@ -332,6 +333,9 @@ impl SP1AvailLightClientOperator {
             .await
             .expect("finalized head");
 
+
+        info!("Finalized head: {}", finalized_block_hash_str);
+
         let sync_committee_key = format!(
             "0x{}{}{}",
             hex::encode(twox_128(pallet.as_bytes())),
@@ -348,7 +352,7 @@ impl SP1AvailLightClientOperator {
                 rpc_params![sync_committee_key, finalized_block_hash_str.clone()],
             )
             .await
-            .expect("Must fetch sync_committee_hash!");
+            .unwrap_or(H256::zero().encode_hex());
 
         // sync committee must be initialized for the start period
         let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
