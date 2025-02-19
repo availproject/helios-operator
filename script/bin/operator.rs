@@ -9,6 +9,7 @@ use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
 use alloy_primitives::hex;
+use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
@@ -27,7 +28,6 @@ use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, 
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
-use alloy::hex::ToHex;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
@@ -333,7 +333,6 @@ impl SP1AvailLightClientOperator {
             .await
             .expect("finalized head");
 
-
         info!("Finalized head: {}", finalized_block_hash_str);
 
         let sync_committee_key = format!(
@@ -394,7 +393,7 @@ mod tests {
         let (_pk, vk) = client.setup(ELF);
 
         assert_eq!(
-            "0x0005ac7aa680f6481fb9ceecfa563d3813334a36d803d2ac1c29bcfa8f69b190",
+            "0x00ed996c6f79e241fd4879d34ebfef7514ad8b817d0b40ab82a9856460d298c0",
             vk.bytes32()
         );
     }
