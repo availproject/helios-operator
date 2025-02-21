@@ -51,3 +51,11 @@ tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch
 bls12_381 = { git = "https://github.com/sp1-patches/bls12_381", tag = "patch-0.8.0-sp1-4.0.0" }
 # From upstream: https://github.com/a16z/helios/blob/master/Cargo.toml#L115
 ethereum_hashing = { git = "https://github.com/ncitron/ethereum_hashing", rev = "7ee70944ed4fabe301551da8c447e4f4ae5e6c35" }
+
+[profile.release]
+panic = "abort"
+
+[profile.maxperf]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
