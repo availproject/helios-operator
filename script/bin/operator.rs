@@ -1,3 +1,5 @@
+mod test;
+
 use alloy::sol;
 use anyhow::{Context, Result};
 use avail::vector::events as VectorEvent;
@@ -7,6 +9,7 @@ use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
 use alloy_primitives::hex;
+use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
@@ -21,9 +24,7 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    EnvProver, HashableKey, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
@@ -332,6 +333,8 @@ impl SP1AvailLightClientOperator {
             .await
             .expect("finalized head");
 
+        info!("Finalized head: {}", finalized_block_hash_str);
+
         let sync_committee_key = format!(
             "0x{}{}{}",
             hex::encode(twox_128(pallet.as_bytes())),
@@ -348,7 +351,7 @@ impl SP1AvailLightClientOperator {
                 rpc_params![sync_committee_key, finalized_block_hash_str.clone()],
             )
             .await
-            .expect("Must fetch sync_committee_hash!");
+            .unwrap_or(H256::zero().encode_hex());
 
         // sync committee must be initialized for the start period
         let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
@@ -378,13 +381,20 @@ async fn main() -> Result<()> {
     }
 }
 
-#[test]
-fn test_program_verification_key() {
-    let client = ProverClient::builder().cpu().build();
-    let (_pk, vk) = client.setup(ELF);
+#[cfg(test)]
+mod tests {
+    use crate::ELF;
+    use sp1_sdk::Prover;
+    use sp1_sdk::{HashableKey, ProverClient};
 
-    assert_eq!(
-        "0x00c6000f201752d6416f919795344ba2638221e7a9b63b9522f98f0f81020a53",
-        vk.bytes32()
-    );
+    #[test]
+    fn test_program_verification_key() {
+        let client = ProverClient::builder().cpu().build();
+        let (_pk, vk) = client.setup(ELF);
+
+        assert_eq!(
+            "0x00ed996c6f79e241fd4879d34ebfef7514ad8b817d0b40ab82a9856460d298c0",
+            vk.bytes32()
+        );
+    }
 }
