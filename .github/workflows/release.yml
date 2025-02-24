@@ -1,0 +1,91 @@
+name: Release
+on:
+  push:
+    branches-ignore:
+      - '**'
+    tags-ignore:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+  release:
+    types:
+      - released
+      - prereleased
+jobs:
+  binary_linux_amd64:
+    runs-on: ubuntu-22.04
+    steps:
+         - uses: actions/checkout@v4
+         - name: Install Cargo Deps And Build Helios Operator
+           shell: bash
+           run: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source "$HOME/.cargo/env"
+            sudo apt-get update && sudo apt-get install -y protobuf-compiler pkg-config
+            cargo build --profile maxperf --bin operator
+            mv target/maxperf/operator target/maxperf/helios-operator-linux-amd64
+            pushd target/maxperf/
+            tar czf helios-operator-linux-amd64.tar.gz helios-operator-linux-amd64
+            popd
+         - uses: actions/upload-artifact@v4
+           with:
+             name: helios-operator-linux-amd64-binary
+             path: target/maxperf/helios-operator-linux-amd64.tar.gz
+
+  binary_publish:
+    needs: [binary_linux_amd64]
+    runs-on: ubuntu-22.04
+    steps:
+         - uses: actions/download-artifact@v4
+           with:
+             name: helios-operator-linux-amd64-binary
+         - name: Export Tag Var
+           id: prepare
+           run: |
+               TAG=${GITHUB_REF#refs/tags/}
+               echo ::set-output name=tag_name::${TAG}
+         - name: Publish Binaries
+           uses: svenstaro/upload-release-action@v2
+           with:
+             repo_token: ${{ secrets.PAT_TOKEN }}
+             file: /home/runner/work/helios-operator/helios-operator/helios-operator*
+             release_name: ${{ steps.prepare.outputs.tag_name }}
+             tag: ${{ steps.prepare.outputs.tag_name }}
+             overwrite: true
+             file_glob: true
+
+  docker_build_push:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Export Tag Var
+        id: prepare
+        run: |
+            TAG=${GITHUB_REF#refs/tags/}
+            echo ::set-output name=tag_name::${TAG}
+      - name: Sets Digital Ocean Registry
+        id: sets_do_registry
+        run: |
+          echo "DO_REGISTRY=registry.digitalocean.com" >> "$GITHUB_OUTPUT"
+      - name: Login to Dockerhub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.sets_do_registry.outputs.DO_REGISTRY }}
+          username: ${{ secrets.DO_USER_EMAIL }}
+          password: ${{ secrets.DO_USER_TOKEN }}
+      - name: Build and push images
+        uses: docker/build-push-action@v6
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.sets_do_registry.outputs.DO_REGISTRY }}/availj/helios-operator:${{ steps.prepare.outputs.tag_name }}
+          build-args: |
+            BUILD_PROFILE=maxperf
