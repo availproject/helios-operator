@@ -67,12 +67,6 @@ pub async fn main() -> Result<()> {
     } else {
         checkpoint = get_latest_checkpoint().await;
     }
-    let sp1_prover = env::var("SP1_PROVER").unwrap();
-
-    let mut verifier = Address::ZERO;
-    if sp1_prover != "mock" {
-        verifier = env::var("SP1_VERIFIER_ADDRESS").unwrap().parse().unwrap();
-    }
 
     let helios_client = get_client(checkpoint).await;
     let finalized_header = helios_client
@@ -130,7 +124,7 @@ pub async fn main() -> Result<()> {
     );
     genesis_config.head = head;
     genesis_config.helios_program_vkey = vk.bytes32();
-    genesis_config.verifier = format!("0x{:x}", verifier);
+    genesis_config.verifier = format!("0x{:x}", Address::ZERO);
 
     // Get the account associated with the private key.
     /*    let private_key = env::var("PRIVATE_KEY").unwrap();
