@@ -174,11 +174,9 @@ impl SP1AvailLightClientOperator {
 
     /// Relay the proof to Avail
     async fn relay_vector_update(&self, proof: SP1ProofWithPublicValues) -> Result<()> {
-        let proof_as_bytes = if env::var("SP1_PROVER")?.to_lowercase() == "mock" {
-            vec![]
-        } else {
-            proof.bytes()
-        };
+        let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
+
+        let proof_as_bytes = if mock { vec![] } else { proof.bytes() };
 
         let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
         let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
@@ -188,7 +186,10 @@ impl SP1AvailLightClientOperator {
         let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
         let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
 
-        let fulfill_call = avail::tx().vector().fulfill(proof_vec, pub_values_vec);
+        let fulfill_call = avail::tx()
+            .vector()
+            .fulfill(proof_vec.clone(), pub_values_vec);
+
         let sdk = SDK::new(avail_rpc.as_str())
             .await
             .expect("Could not create SDK!");
@@ -358,6 +359,8 @@ impl SP1AvailLightClientOperator {
             .context("parse sync_committee_hash")?;
         let hash: H256 = Decode::decode(&mut sync_committee_hash.as_slice())
             .context("Decode sync_committee_hash")?;
+
+        info!("Sync committee hash: {}", hash);
 
         Ok(H256(hash.into()))
     }
