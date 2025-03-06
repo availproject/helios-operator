@@ -24,7 +24,8 @@ async fn main() -> Result<()> {
     let checkpoint = if let Some(slot) = args.slot {
         get_checkpoint(slot).await
     } else {
-        get_latest_checkpoint().await
+        // test slot
+        get_checkpoint(7121216).await
     };
 
     // Setup client.

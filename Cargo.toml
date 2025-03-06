@@ -14,9 +14,9 @@ sp1-helios-primitives = { path = "primitives" }
 
 # helios
 # todo add release versions of the helios
-helios = { git = "https://github.com/a16z/helios", rev = "d4b5cea6d63cb89366fc12ed265040a9720a9c86" }
-helios-consensus-core = { git = "https://github.com/a16z/helios", rev = "d4b5cea6d63cb89366fc12ed265040a9720a9c86" }
-helios-ethereum = { git = "https://github.com/a16z/helios", rev = "d4b5cea6d63cb89366fc12ed265040a9720a9c86" }
+helios = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
+helios-consensus-core = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
+helios-ethereum = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
 
 # general
 dotenv = "0.15.0"
