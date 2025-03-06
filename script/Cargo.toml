@@ -42,6 +42,7 @@ avail-rust = { workspace = true }
 sp-core = { workspace = true }
 jsonrpsee = {workspace = true}
 url = {workspace = true}
+async-std = "1.13.0"
 
 
 [build-dependencies]

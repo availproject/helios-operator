@@ -31,7 +31,8 @@ use std::time::Instant;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
-
+// Skip problematic slot
+const SLOT_TO_SKIP: u64 = 7121216;
 struct SP1AvailLightClientOperator {
     client: EnvProver,
     avail_client: HttpClient,
@@ -102,10 +103,16 @@ impl SP1AvailLightClientOperator {
         mut client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
         // head is initialised
-        let head: u64 = self.get_head().await?;
+        let mut head = self.get_head().await?;
+        if head == SLOT_TO_SKIP {
+            info!("Skipping slot {} with slot {}", head, 7121280);
+            head = 7121280;
+        }
+
         let slot_per_period = env::var("SLOTS_PER_PERIOD")
             .unwrap_or("8192".to_string())
             .parse::<u64>()?;
+
         info!("Head/Slot {}", head);
 
         let period = head / slot_per_period;
@@ -174,11 +181,9 @@ impl SP1AvailLightClientOperator {
 
     /// Relay the proof to Avail
     async fn relay_vector_update(&self, proof: SP1ProofWithPublicValues) -> Result<()> {
-        let proof_as_bytes = if env::var("SP1_PROVER")?.to_lowercase() == "mock" {
-            vec![]
-        } else {
-            proof.bytes()
-        };
+        let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
+
+        let proof_as_bytes = if mock { vec![] } else { proof.bytes() };
 
         let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
         let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
@@ -188,7 +193,10 @@ impl SP1AvailLightClientOperator {
         let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
         let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
 
-        let fulfill_call = avail::tx().vector().fulfill(proof_vec, pub_values_vec);
+        let fulfill_call = avail::tx()
+            .vector()
+            .fulfill(proof_vec.clone(), pub_values_vec);
+
         let sdk = SDK::new(avail_rpc.as_str())
             .await
             .expect("Could not create SDK!");
@@ -255,7 +263,13 @@ impl SP1AvailLightClientOperator {
         loop {
             // Get the current slot from the contract
             let start = Instant::now();
-            let slot = self.get_head().await?;
+            // 7,121,216
+            let mut slot = self.get_head().await?;
+            if slot == SLOT_TO_SKIP {
+                info!("Skipping slot {} with slot {}", slot, 7121280);
+                slot = 7121280;
+            }
+
             info!("Current slot: {}", slot);
 
             // Fetch the checkpoint at that slot
@@ -358,6 +372,8 @@ impl SP1AvailLightClientOperator {
             .context("parse sync_committee_hash")?;
         let hash: H256 = Decode::decode(&mut sync_committee_hash.as_slice())
             .context("Decode sync_committee_hash")?;
+
+        info!("Sync committee hash: {}", hash);
 
         Ok(H256(hash.into()))
     }
