@@ -11,6 +11,7 @@ use helios_ethereum::{
     rpc::http_rpc::HttpRpc,
 };
 
+use jsonrpsee::tracing::info;
 use std::sync::Arc;
 use tokio::sync::{mpsc::channel, watch};
 use tree_hash::TreeHash;
@@ -104,6 +105,8 @@ pub async fn get_client(checkpoint: B256) -> Inner<MainnetConsensusSpec, HttpRpc
         channel_send,
         Arc::new(config),
     );
+
+    info!(target: "rpc", "checkpoint {:x}", checkpoint);
 
     client.bootstrap(checkpoint).await.unwrap();
     client

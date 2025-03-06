@@ -31,7 +31,8 @@ use std::time::Instant;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
-
+// Skip problematic slot
+const SLOT_TO_SKIP: u64 = 7121216;
 struct SP1AvailLightClientOperator {
     client: EnvProver,
     avail_client: HttpClient,
@@ -102,10 +103,16 @@ impl SP1AvailLightClientOperator {
         mut client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
         // head is initialised
-        let head: u64 = self.get_head().await?;
+        let mut head = self.get_head().await?;
+        if head == SLOT_TO_SKIP {
+            info!("Skipping slot {} with slot {}", head, 7121280);
+            head = 7121280;
+        }
+
         let slot_per_period = env::var("SLOTS_PER_PERIOD")
             .unwrap_or("8192".to_string())
             .parse::<u64>()?;
+
         info!("Head/Slot {}", head);
 
         let period = head / slot_per_period;
@@ -256,7 +263,13 @@ impl SP1AvailLightClientOperator {
         loop {
             // Get the current slot from the contract
             let start = Instant::now();
-            let slot = self.get_head().await?;
+            // 7,121,216
+            let mut slot = self.get_head().await?;
+            if slot == SLOT_TO_SKIP {
+                info!("Skipping slot {} with slot {}", slot, 7121280);
+                slot = 7121280;
+            }
+
             info!("Current slot: {}", slot);
 
             // Fetch the checkpoint at that slot
