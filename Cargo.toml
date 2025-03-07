@@ -13,10 +13,9 @@ authors = ["0xSasaPrsic"]
 sp1-helios-primitives = { path = "primitives" }
 
 # helios
-# todo add release versions of the helios
-helios = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
-helios-consensus-core = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
-helios-ethereum = { git = "https://github.com/a16z/helios", rev = "77013dd794e553cba0d43433aacf3108bba6e96d" }
+helios = { git = "https://github.com/a16z/helios", tag = "0.8.3" }
+helios-consensus-core = { git = "https://github.com/a16z/helios", tag = "0.8.3" }
+helios-ethereum = { git = "https://github.com/a16z/helios", tag = "0.8.3" }
 
 # general
 dotenv = "0.15.0"
