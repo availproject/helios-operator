@@ -102,7 +102,7 @@ impl SP1AvailLightClientOperator {
         mut client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
         // head is initialised
-        let mut head = self.get_head().await?;
+        let head = self.get_head().await?;
 
         let slot_per_period = env::var("SLOTS_PER_PERIOD")
             .unwrap_or("8192".to_string())
