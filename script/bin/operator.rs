@@ -11,12 +11,9 @@ use helios_ethereum::rpc::ConsensusRpc;
 use alloy_primitives::hex;
 use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
-use avail_rust::avail::vector::calls::types::fulfill_call;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::subxt::runtime_api::StaticPayload;
-use avail_rust::subxt::utils::Static;
-use avail_rust::{avail, Block, Keypair, Options, SecretUri, Transaction, H256, SDK};
+use avail_rust::{avail, Keypair, Options, SecretUri, H256, SDK};
 use jsonrpsee::tracing::{error, info};
 use jsonrpsee::{
     core::client::ClientT,
