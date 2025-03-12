@@ -221,13 +221,14 @@ impl SP1AvailLightClientOperator {
                 .expect("Transaction must be executed!")
         };
 
-        if result.is_successful().unwrap() {
-            info!(
+        if !result.is_successful().unwrap() {
+            error!(
                 "block_number" = result.block_number,
                 "block_hash" = format!("{:?}", result.block_hash),
                 "tx_hash" = format!("{:?}", result.tx_hash),
                 "Transaction send failed!"
             );
+            return Err(anyhow!("Tx failed!"));
         }
 
         let Some(events) = &result.events else {
