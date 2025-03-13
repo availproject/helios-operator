@@ -1,7 +1,7 @@
 mod test;
 
 use alloy::sol;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use avail::vector::events as VectorEvent;
 use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
 use helios_ethereum::consensus::Inner;
@@ -13,9 +13,7 @@ use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::transactions::Transaction;
-use avail_rust::Nonce::BestBlockAndTxPool;
-use avail_rust::{avail, Block, Keypair, Options, SecretUri, H256, SDK};
+use avail_rust::{avail, Keypair, Options, SecretUri, H256, SDK};
 use jsonrpsee::tracing::{error, info};
 use jsonrpsee::{
     core::client::ClientT,
@@ -188,20 +186,18 @@ impl SP1AvailLightClientOperator {
         let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
         let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
 
-        let fulfill_call = avail::tx()
-            .vector()
-            .fulfill(proof_vec.clone(), pub_values_vec);
-
         let sdk = SDK::new(avail_rpc.as_str())
             .await
             .expect("Could not create SDK!");
 
         let account_id = account.public_key().to_account_id();
         let storage_query = avail::storage().system().account(account_id);
-        let best_block_hash = Block::fetch_best_block_hash(&sdk.rpc_client)
+        let best_block_hash = &sdk
+            .client
+            .best_block_hash()
             .await
             .expect("Must fetch fetch_best_block_hash!");
-        let storage = sdk.online_client.storage().at(best_block_hash);
+        let storage = sdk.client.storage().at(*best_block_hash);
         let result = storage.fetch(&storage_query).await?;
         if let Some(account) = result {
             info!(
@@ -211,18 +207,36 @@ impl SP1AvailLightClientOperator {
             );
         }
 
-        let tx = Transaction::new(
-            sdk.online_client.clone(),
-            sdk.rpc_client.clone(),
-            fulfill_call,
-        );
-        let options = Some(Options::new().nonce(BestBlockAndTxPool));
-        let result = tx
-            .execute_wait_for_finalization(&account, options)
-            .await
-            .expect("Transaction must be executed!");
+        let result = if mock {
+            info!("Using mocked proof (mock_fulfill)!");
+            let tx = sdk.tx.vector.mock_fulfill(pub_values_vec.0);
+            tx.execute_and_watch_finalization(&account, Options::new())
+                .await
+                .expect("Transaction must be executed!")
+        } else {
+            info!("Using real proof (fulfill)!");
+            let tx = sdk.tx.vector.fulfill(proof_vec.0, pub_values_vec.0);
+            tx.execute_and_watch_finalization(&account, Options::new())
+                .await
+                .expect("Transaction must be executed!")
+        };
 
-        let head_updated = result.find_event::<VectorEvent::HeadUpdated>();
+        if !result.is_successful().unwrap() {
+            error!(
+                "block_number" = result.block_number,
+                "block_hash" = format!("{:?}", result.block_hash),
+                "tx_hash" = format!("{:?}", result.tx_hash),
+                "Transaction send failed!"
+            );
+            return Err(anyhow!("Tx failed!"));
+        }
+
+        let Some(events) = &result.events else {
+            error!("No events received!");
+            return Err(anyhow!("No events received!"));
+        };
+
+        let head_updated = events.find::<VectorEvent::HeadUpdated>();
 
         info!(
             "block_number" = result.block_number,
@@ -245,7 +259,6 @@ impl SP1AvailLightClientOperator {
                 "tx_hash" = format!("{:?}", result.tx_hash),
                 "No head updated"
             );
-            error!("Failed transaction result: {:?}", result)
         }
 
         Ok(())
