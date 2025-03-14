@@ -221,7 +221,8 @@ impl SP1AvailLightClientOperator {
                 .expect("Transaction must be executed!")
         };
 
-        if !result.is_successful().unwrap() {
+        // if tx failed throw an error and retry
+        if !result.is_successful().unwrap_or(false) {
             error!(
                 "block_number" = result.block_number,
                 "block_hash" = format!("{:?}", result.block_hash),
@@ -237,7 +238,6 @@ impl SP1AvailLightClientOperator {
         };
 
         let head_updated = events.find::<VectorEvent::HeadUpdated>();
-
         info!(
             "block_number" = result.block_number,
             "block_hash" = format!("{:?}", result.block_hash),
@@ -411,7 +411,7 @@ mod tests {
         let (_pk, vk) = client.setup(ELF);
 
         assert_eq!(
-            "0x00ed996c6f79e241fd4879d34ebfef7514ad8b817d0b40ab82a9856460d298c0",
+            "0x00c6185bf31bd3d4ff2311e2c9e63d6b8373a719ad53ab31584c4d98496ee7f9",
             vk.bytes32()
         );
     }
