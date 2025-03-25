@@ -17,10 +17,14 @@ path = "./bin/operator.rs"
 name = "test"
 path = "./bin/test.rs"
 
+[[bin]]
+name = "profiler"
+path = "./bin/profiler.rs"
+
 
 [dependencies]
 dotenv = { workspace = true }
-sp1-sdk = { workspace = true }
+sp1-sdk = { workspace = true, features = ["profiling"] }
 tokio = { workspace = true }
 helios-consensus-core = { workspace = true }
 helios-ethereum = { workspace = true }
