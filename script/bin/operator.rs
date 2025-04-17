@@ -22,16 +22,19 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{
+    NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey,
+    SP1Stdin,
+};
 use std::env;
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
-    client: EnvProver,
+    client: NetworkProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -79,13 +82,13 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let client = ProverClient::from_env();
+        let client = ProverClient::builder().network().build();
+        let (pk, _) = client.setup(ELF);
+
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
             .build(avail_rpc)
             .expect("Could not create RPC client");
-
-        let (pk, _) = client.setup(ELF);
 
         Self {
             client,
@@ -166,10 +169,23 @@ impl SP1AvailLightClientOperator {
 
         info!("Generate proof start");
         // Generate proof.
-        let proof = self.client.prove(&self.pk, &stdin).groth16().run()?;
-        info!("Generate proof end");
-        log::info!("Attempting to update to new head block: {:?}", latest_block);
-        Ok(Some(proof))
+        let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
+        if mock {
+            info!("Using mock prover");
+            let prover_client = ProverClient::builder().mock().build();
+            let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
+            Ok(Some(proof))
+        } else {
+            let proof = self
+                .client
+                .prove(&self.pk, &stdin)
+                .groth16()
+                .timeout(Duration::from_secs(900))
+                .run()?;
+            info!("Generate proof end");
+            log::info!("Attempting to update to new head block: {:?}", latest_block);
+            Ok(Some(proof))
+        }
     }
 
     /// Relay the proof to Avail
