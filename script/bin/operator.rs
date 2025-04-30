@@ -403,8 +403,7 @@ impl SP1AvailLightClientOperator {
 async fn main() -> Result<()> {
     env::set_var("RUST_LOG", "info");
     dotenv::dotenv().ok();
-    let log_level = env::var("LOG_LEVEL")
-        .unwrap_or("info".to_string());
+    let log_level = env::var("LOG_LEVEL").unwrap_or("info".to_string());
 
     tracing_subscriber::registry()
         .with(
@@ -412,7 +411,7 @@ async fn main() -> Result<()> {
                 .json()
                 .with_current_span(true)
                 .with_line_number(true)
-                .with_target(true)
+                .with_target(true),
         )
         .with(LevelFilter::from_str(&log_level)?)
         .init();
