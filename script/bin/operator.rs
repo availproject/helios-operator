@@ -28,6 +28,9 @@ use sp1_sdk::{
 use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
@@ -126,7 +129,7 @@ impl SP1AvailLightClientOperator {
         // Check if contract is up to date
         let latest_block = finality_update.finalized_header().beacon().slot;
         if latest_block <= head {
-            log::info!("Contract is up to date. Nothing to update.");
+            info!("Contract is up to date. Nothing to update.");
             return Ok(None);
         }
 
@@ -182,7 +185,7 @@ impl SP1AvailLightClientOperator {
                 .timeout(Duration::from_secs(900))
                 .run()?;
             info!("Generate proof end");
-            log::info!("Attempting to update to new head block: {:?}", latest_block);
+            info!("Attempting to update to new head block: {:?}", latest_block);
             Ok(Some(proof))
         }
     }
@@ -400,7 +403,19 @@ impl SP1AvailLightClientOperator {
 async fn main() -> Result<()> {
     env::set_var("RUST_LOG", "info");
     dotenv::dotenv().ok();
-    env_logger::init();
+    let log_level = env::var("LOG_LEVEL")
+        .unwrap_or("info".to_string());
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_line_number(true)
+                .with_target(true)
+        )
+        .with(LevelFilter::from_str(&log_level)?)
+        .init();
 
     let loop_delay_mins = env::var("LOOP_DELAY_MINS")
         .unwrap_or("5".to_string())

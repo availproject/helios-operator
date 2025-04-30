@@ -28,8 +28,8 @@ sp1-helios-primitives = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 clap = { workspace = true }
-log = { workspace = true }
-env_logger = { workspace = true }
+tracing = {workspace = true}
+tracing-subscriber = { workspace = true, features = ["json"] }
 alloy-primitives = { workspace = true }
 alloy = { workspace = true }
 anyhow = { workspace = true }
