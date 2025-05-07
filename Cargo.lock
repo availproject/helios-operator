@@ -15711,12 +15711,10 @@ dependencies = [
  "cargo_metadata 0.18.1",
  "clap",
  "dotenv",
- "env_logger 0.11.6",
  "helios-consensus-core",
  "helios-ethereum",
  "hex",
  "jsonrpsee 0.20.4",
- "log",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -15726,6 +15724,8 @@ dependencies = [
  "sp1-helios-primitives",
  "sp1-sdk",
  "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
  "tree_hash",
  "url",
 ]
@@ -17175,6 +17175,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17193,7 +17203,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log 0.1.4",
- "tracing-serde",
+ "tracing-serde 0.1.3",
 ]
 
 [[package]]
@@ -17206,6 +17216,8 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
@@ -17213,6 +17225,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log 0.2.0",
+ "tracing-serde 0.2.0",
 ]
 
 [[package]]
