@@ -22,12 +22,10 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::{CudaProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -36,7 +34,7 @@ use tree_hash::TreeHash;
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
-    client: NetworkProver,
+    client: CudaProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -84,7 +82,7 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let client = ProverClient::builder().network().build();
+        let client = ProverClient::builder().cuda().build();
         let (pk, _) = client.setup(ELF);
 
         let avail_client = HttpClientBuilder::default()
@@ -182,7 +180,6 @@ impl SP1AvailLightClientOperator {
                 .client
                 .prove(&self.pk, &stdin)
                 .groth16()
-                .timeout(Duration::from_secs(900))
                 .run()?;
             info!("Generate proof end");
             info!("Attempting to update to new head block: {:?}", latest_block);
