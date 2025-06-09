@@ -8,10 +8,10 @@ use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
+use crate::SP1Helios::ProofOutputs;
 use alloy::sol_types::SolValue;
 use alloy_primitives::hex;
 use alloy_primitives::hex::ToHexExt;
-use avail_rust::avail::babe::storage::types::current_slot::CurrentSlot;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
@@ -22,7 +22,7 @@ use jsonrpsee::{
     http_client::{HttpClient, HttpClientBuilder},
     rpc_params,
 };
-use sp1_helios_primitives::types::{ProofInputs, ProofOutputs};
+use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
 use sp1_sdk::{
     NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
@@ -191,7 +191,7 @@ impl SP1AvailLightClientOperator {
             let proof_outputs: ProofOutputs =
                 SolValue::abi_decode(&proof.public_values.as_slice(), true)
                     .context("Cannot decode public values")?;
-            let new_slot = proof_outputs.newHead.to();
+            let new_slot: u64 = proof_outputs.newHead.to();
             if new_slot <= head {
                 tracing::warn!(
                     message = "New slot slot is <= from the current, skipping update",
