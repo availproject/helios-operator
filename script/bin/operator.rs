@@ -189,7 +189,7 @@ impl SP1AvailLightClientOperator {
             info!("Generate proof end");
 
             let proof_outputs: ProofOutputs =
-                SolValue::abi_decode(&proof.public_values.as_slice(), true)
+                SolValue::abi_decode(proof.public_values.as_slice(), true)
                     .context("Cannot decode public values")?;
             let new_slot: u64 = proof_outputs.newHead.to();
             if new_slot <= head {
