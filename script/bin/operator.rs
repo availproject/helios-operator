@@ -194,7 +194,7 @@ impl SP1AvailLightClientOperator {
             let new_slot: u64 = proof_outputs.newHead.to();
             if new_slot <= head {
                 tracing::warn!(
-                    message = "New slot slot is <= from the current, skipping update",
+                    message = "New slot is <= from the current, skipping update",
                     current_slot = head,
                     new_slot = new_slot
                 );
