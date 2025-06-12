@@ -43,6 +43,7 @@ sp-core = { workspace = true }
 jsonrpsee = {workspace = true}
 url = {workspace = true}
 async-std = "1.13.0"
+env_logger = "0.10.2"
 
 
 [build-dependencies]

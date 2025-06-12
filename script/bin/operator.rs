@@ -22,9 +22,7 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::{CpuProver, NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -36,7 +34,7 @@ use tree_hash::TreeHash;
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
-    client: NetworkProver,
+    client: CpuProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -84,7 +82,7 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let client = ProverClient::builder().network().build();
+        let client = ProverClient::builder().cpu().build();
         let (pk, _) = client.setup(ELF);
 
         let avail_client = HttpClientBuilder::default()
@@ -170,6 +168,8 @@ impl SP1AvailLightClientOperator {
         stdin.write_slice(&encoded_proof_inputs);
 
         info!("Generate proof start");
+        let start = Instant::now();
+
         // Generate proof.
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
         if mock {
@@ -182,9 +182,12 @@ impl SP1AvailLightClientOperator {
                 .client
                 .prove(&self.pk, &stdin)
                 .groth16()
-                .timeout(Duration::from_secs(900))
+                // .timeout(Duration::from_secs(900))
                 .run()?;
             info!("Generate proof end");
+            let duration = start.elapsed();
+            info!("Execution time: {:.2} seconds", duration.as_secs_f64());
+
             info!("Attempting to update to new head block: {:?}", latest_block);
             Ok(Some(proof))
         }
@@ -403,18 +406,17 @@ impl SP1AvailLightClientOperator {
 async fn main() -> Result<()> {
     env::set_var("RUST_LOG", "info");
     dotenv::dotenv().ok();
-    let log_level = env::var("LOG_LEVEL").unwrap_or("info".to_string());
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .json()
-                .with_current_span(true)
-                .with_line_number(true)
-                .with_target(true),
-        )
-        .with(LevelFilter::from_str(&log_level)?)
-        .init();
+    env_logger::init();
+    // tracing_subscriber::registry()
+    //     .with(
+    //         tracing_subscriber::fmt::layer()
+    //             .json()
+    //             .with_current_span(true)
+    //             .with_line_number(true)
+    //             .with_target(true),
+    //     )
+    //     .with(LevelFilter::from_str(&log_level)?)
+    //     .init();
 
     let loop_delay_mins = env::var("LOOP_DELAY_MINS")
         .unwrap_or("5".to_string())

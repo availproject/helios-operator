@@ -15686,6 +15686,7 @@ dependencies = [
  "cargo_metadata 0.18.1",
  "clap",
  "dotenv",
+ "env_logger 0.10.2",
  "helios-consensus-core",
  "helios-ethereum",
  "hex",
