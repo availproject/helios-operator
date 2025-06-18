@@ -176,11 +176,19 @@ impl SP1AvailLightClientOperator {
             let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
             Ok(Some(proof))
         } else {
+            let start = Instant::now();
+
             let proof = self
                 .client
                 .prove(&self.pk, &stdin)
                 .groth16()
                 .run()?;
+
+            let duration = start.elapsed();
+
+            // Print the duration in seconds
+            info!("Execution time: {:.2} seconds", duration.as_secs_f64());
+            info!("Proof: {:?}", proof);
             info!("Generate proof end");
             info!("Attempting to update to new head block: {:?}", latest_block);
             Ok(Some(proof))
