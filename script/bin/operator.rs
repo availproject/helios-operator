@@ -322,7 +322,7 @@ impl SP1AvailLightClientOperator {
             info!("duration" = duration.as_secs(), "Loop finished");
 
             info!("Sleeping for {:?} minutes", loop_delay_mins);
-            tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
+            std::process::exit(0);
         }
     }
 
