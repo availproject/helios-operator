@@ -180,6 +180,9 @@ impl SP1AvailLightClientOperator {
             let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
             Ok(Some(proof))
         } else {
+            let balance = self.client.get_balance().await?;
+            info!(message = "Available balance", balance = balance.to_string());
+
             let proof = self
                 .client
                 .prove(&self.pk, &stdin)
