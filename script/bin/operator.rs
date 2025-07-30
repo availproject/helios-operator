@@ -22,10 +22,12 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{CudaProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{
+    CudaProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
+};
 use std::env;
 use std::str::FromStr;
-use std::time::{Instant};
+use std::time::Instant;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -83,7 +85,7 @@ impl SP1AvailLightClientOperator {
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
         let client = ProverClient::builder().cuda().build();
-        let (pk, _) = client.setup(ELF);
+        let (pk, _vk) = client.setup(ELF);
 
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
@@ -178,14 +180,9 @@ impl SP1AvailLightClientOperator {
         } else {
             let start = Instant::now();
 
-            let proof = self
-                .client
-                .prove(&self.pk, &stdin)
-                .groth16()
-                .run()?;
+            let proof = self.client.prove(&self.pk, &stdin).groth16().run()?;
 
             let duration = start.elapsed();
-
             // Print the duration in seconds
             info!("Execution time: {:.2} seconds", duration.as_secs_f64());
             info!("Proof: {:?}", proof);
@@ -291,39 +288,36 @@ impl SP1AvailLightClientOperator {
     async fn run(&mut self, loop_delay_mins: u64) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
-        loop {
-            // Get the current slot from the contract
-            let start = Instant::now();
-            let slot = self.get_head().await?;
-            info!("Current slot: {}", slot);
+        // Get the current slot from the contract
+        let start = Instant::now();
+        let slot = self.get_head().await?;
+        info!("Current slot: {}", slot);
 
-            // Fetch the checkpoint at that slot
-            let checkpoint = get_checkpoint(slot).await;
+        // Fetch the checkpoint at that slot
+        let checkpoint = get_checkpoint(slot).await;
 
-            // Get the client from the checkpoint
-            let client = get_client(checkpoint).await;
+        // Get the client from the checkpoint
+        let client = get_client(checkpoint).await;
 
-            // Request an update
-            match self.request_update(client).await {
-                Ok(Some(proof)) => {
-                    self.relay_vector_update(proof).await?;
-                }
-                Ok(None) => {
-                    // Contract is up to date. Nothing to update.
-                }
-                Err(e) => {
-                    error!("Request for update failed: {}", e);
-                    info!("Retrying...");
-                    continue;
-                }
-            };
-            let duration = start.elapsed();
+        // Request an update
+        match self.request_update(client).await {
+            Ok(Some(proof)) => {
+                self.relay_vector_update(proof).await?;
+            }
+            Ok(None) => {
+                // Contract is up to date. Nothing to update.
+            }
+            Err(e) => {
+                error!("Request for update failed: {}", e);
+                return Err(e);
+            }
+        };
+        let duration = start.elapsed();
 
-            info!("duration" = duration.as_secs(), "Loop finished");
+        info!("duration" = duration.as_secs(), "Loop finished");
 
-            info!("Sleeping for {:?} minutes", loop_delay_mins);
-            std::process::exit(0);
-        }
+        info!("Sleeping for {:?} minutes", loop_delay_mins);
+        Ok(())
     }
 
     /// get_head reads head from the Avail chain
@@ -426,11 +420,11 @@ async fn main() -> Result<()> {
         .parse()?;
 
     let mut operator = SP1AvailLightClientOperator::new().await;
-    loop {
-        if let Err(e) = operator.run(loop_delay_mins).await {
-            error!("Error running operator: {}", e);
-        }
+    if let Err(e) = operator.run(loop_delay_mins).await {
+        error!("Error running operator: {}", e);
+        return Err(anyhow!("Error running operator: {}", e));
     }
+    Ok(())
 }
 
 #[cfg(test)]
