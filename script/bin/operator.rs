@@ -286,39 +286,36 @@ impl SP1AvailLightClientOperator {
     async fn run(&mut self, loop_delay_mins: u64) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
-        loop {
-            // Get the current slot from the contract
-            let start = Instant::now();
-            let slot = self.get_head().await?;
-            info!("Current slot: {}", slot);
+        // Get the current slot from the contract
+        let start = Instant::now();
+        let slot = self.get_head().await?;
+        info!("Current slot: {}", slot);
 
-            // Fetch the checkpoint at that slot
-            let checkpoint = get_checkpoint(slot).await;
+        // Fetch the checkpoint at that slot
+        let checkpoint = get_checkpoint(slot).await;
 
-            // Get the client from the checkpoint
-            let client = get_client(checkpoint).await;
+        // Get the client from the checkpoint
+        let client = get_client(checkpoint).await;
 
-            // Request an update
-            match self.request_update(client).await {
-                Ok(Some(proof)) => {
-                    self.relay_vector_update(proof).await?;
-                }
-                Ok(None) => {
-                    // Contract is up to date. Nothing to update.
-                }
-                Err(e) => {
-                    error!("Request for update failed: {}", e);
-                    info!("Retrying...");
-                    continue;
-                }
-            };
-            let duration = start.elapsed();
+        // Request an update
+        match self.request_update(client).await {
+            Ok(Some(proof)) => {
+                self.relay_vector_update(proof).await?;
+            }
+            Ok(None) => {
+                // Contract is up to date. Nothing to update.
+            }
+            Err(e) => {
+                error!("Request for update failed: {}", e);
+                return Err(e);
+            }
+        };
+        let duration = start.elapsed();
 
-            info!("duration" = duration.as_secs(), "Loop finished");
+        info!("duration" = duration.as_secs(), "Loop finished");
 
-            info!("Sleeping for {:?} minutes", loop_delay_mins);
-            tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
-        }
+        info!("Sleeping for {:?} minutes", loop_delay_mins);
+        Ok(())
     }
 
     /// get_head reads head from the Avail chain
@@ -421,11 +418,11 @@ async fn main() -> Result<()> {
         .parse()?;
 
     let mut operator = SP1AvailLightClientOperator::new().await;
-    loop {
-        if let Err(e) = operator.run(loop_delay_mins).await {
-            error!("Error running operator: {}", e);
-        }
+    if let Err(e) = operator.run(loop_delay_mins).await {
+        error!("Error running operator: {}", e);
+        return Err(anyhow!("Error running operator: {}", e));
     }
+    Ok(())
 }
 
 #[cfg(test)]
