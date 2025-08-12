@@ -105,14 +105,14 @@ pub async fn main() -> Result<()> {
     // Read the Genesis config from the contracts directory.
     let mut genesis_config = get_existing_genesis_config(&workspace_root)?;
 
-    genesis_config.genesis_validators_root = format!("0x{:x}", genesis_root);
+    genesis_config.genesis_validators_root = format!("0x{genesis_root:x}");
     genesis_config.genesis_time = genesis_time;
     genesis_config.seconds_per_slot = SECONDS_PER_SLOT;
     genesis_config.slots_per_period = SLOTS_PER_PERIOD;
     genesis_config.slots_per_epoch = SLOTS_PER_EPOCH;
     genesis_config.source_chain_id = source_chain_id;
-    genesis_config.sync_committee_hash = format!("0x{:x}", sync_committee_hash);
-    genesis_config.header = format!("0x{:x}", finalized_header);
+    genesis_config.sync_committee_hash = format!("0x{sync_committee_hash:x}");
+    genesis_config.header = format!("0x{finalized_header:x}");
     genesis_config.execution_state_root = format!(
         "0x{:x}",
         helios_client

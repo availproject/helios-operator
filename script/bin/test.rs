@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     let prover_client = ProverClient::builder().cpu().build();
     let (_, report) = prover_client.execute(ELF, &stdin).run()?;
-    println!("Execution Report: {:?}", report);
+    println!("Execution Report: {report:?}");
 
     Ok(())
 }

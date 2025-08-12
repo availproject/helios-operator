@@ -23,11 +23,12 @@ use jsonrpsee::{
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
 use sp1_sdk::{
-    CudaProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
+    EnvProver, ProverClient,
+    SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
 };
 use std::env;
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -36,7 +37,7 @@ use tree_hash::TreeHash;
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
-    client: CudaProver,
+    env_prover: EnvProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -84,8 +85,9 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let client = ProverClient::builder().cuda().build();
-        let (pk, _vk) = client.setup(ELF);
+        let env_prover = ProverClient::from_env();
+
+        let (pk, _) = env_prover.setup(ELF);
 
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
@@ -93,7 +95,7 @@ impl SP1AvailLightClientOperator {
             .expect("Could not create RPC client");
 
         Self {
-            client,
+            env_prover,
             avail_client,
             pk,
         }
@@ -178,14 +180,11 @@ impl SP1AvailLightClientOperator {
             let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
             Ok(Some(proof))
         } else {
-            let start = Instant::now();
-
-            let proof = self.client.prove(&self.pk, &stdin).groth16().run()?;
-
-            let duration = start.elapsed();
-            // Print the duration in seconds
-            info!("Execution time: {:.2} seconds", duration.as_secs_f64());
-            info!("Proof: {:?}", proof);
+            let proof = self
+                .env_prover
+                .prove(&self.pk, &stdin)
+                .groth16()
+                .run()?;
             info!("Generate proof end");
             info!("Attempting to update to new head block: {:?}", latest_block);
             Ok(Some(proof))
