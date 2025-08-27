@@ -24,6 +24,7 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
+use sp1_sdk::network::FulfillmentStrategy;
 use sp1_sdk::{
     NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
 };
@@ -187,13 +188,13 @@ impl SP1AvailLightClientOperator {
                 .client
                 .prove(&self.pk, &stdin)
                 .groth16()
+                .strategy(FulfillmentStrategy::Auction)
                 .timeout(Duration::from_secs(900))
                 .run()?;
             info!("Generate proof end");
 
-            let proof_outputs: ProofOutputs =
-                SolValue::abi_decode(proof.public_values.as_slice(), true)
-                    .context("Cannot decode public values")?;
+            let proof_outputs: ProofOutputs = SolValue::abi_decode(proof.public_values.as_slice())
+                .context("Cannot decode public values")?;
             let new_slot: u64 = proof_outputs.newHead.to();
             if new_slot <= head {
                 tracing::warn!(
