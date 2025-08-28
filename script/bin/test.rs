@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         get_checkpoint(slot).await
     } else {
         // test slot
-        get_checkpoint(7121216).await
+        get_checkpoint(8386048).await
     };
 
     // Setup client.
