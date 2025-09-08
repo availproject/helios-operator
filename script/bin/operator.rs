@@ -183,6 +183,8 @@ impl SP1AvailLightClientOperator {
             let proof = if spn {
                 info!("Using spn network prover");
                 let spn_client = ProverClient::builder().network().build();
+                let balance = spn_client.get_balance().await?;
+                info!(message = "Available balance", balance = balance.to_string());
                 let proof = spn_client
                     .prove(&self.pk, &stdin)
                     .groth16()
