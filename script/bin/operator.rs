@@ -22,13 +22,11 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    EnvProver, ProverClient,
-    SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::network::FulfillmentStrategy;
+use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
-use std::time::{Instant};
+use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -180,14 +178,27 @@ impl SP1AvailLightClientOperator {
             let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
             Ok(Some(proof))
         } else {
-            let proof = self
-                .env_prover
-                .prove(&self.pk, &stdin)
-                .groth16()
-                .run()?;
+            let spn = env::var("SP1_PROVER")?.to_lowercase() == "network";
+
+            let proof = if spn {
+                info!("Using spn network prover");
+                let spn_client = ProverClient::builder().network().build();
+                let proof = spn_client
+                    .prove(&self.pk, &stdin)
+                    .groth16()
+                    .strategy(FulfillmentStrategy::Auction)
+                    .timeout(Duration::from_secs(900))
+                    .run()?;
+                Ok(Some(proof))
+            } else {
+                info!("Using predefined prover");
+                let proof = self.env_prover.prove(&self.pk, &stdin).groth16().run()?;
+                Ok(Some(proof))
+            };
+
             info!("Generate proof end");
             info!("Attempting to update to new head block: {:?}", latest_block);
-            Ok(Some(proof))
+            proof
         }
     }
 
