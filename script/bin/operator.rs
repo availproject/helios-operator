@@ -170,7 +170,6 @@ impl SP1AvailLightClientOperator {
         stdin.write_slice(&encoded_proof_inputs);
 
         info!("Generate proof start");
-        // Generate proof.
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
         if mock {
             info!("Using mock prover");
@@ -195,12 +194,13 @@ impl SP1AvailLightClientOperator {
                 Ok(Some(proof))
             } else {
                 info!("Using predefined prover");
+
                 let proof = self.env_prover.prove(&self.pk, &stdin).groth16().run()?;
                 Ok(Some(proof))
             };
-
             info!("Generate proof end");
             info!("Attempting to update to new head block: {:?}", latest_block);
+
             proof
         }
     }
@@ -210,7 +210,6 @@ impl SP1AvailLightClientOperator {
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
 
         let proof_as_bytes = if mock { vec![] } else { proof.bytes() };
-
         let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
         let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
         let secret_uri = SecretUri::from_str(secret.as_str())?;
@@ -254,7 +253,6 @@ impl SP1AvailLightClientOperator {
                 .expect("Transaction must be executed!")
         };
 
-        // if tx failed throw an error and retry
         if !result.is_successful().unwrap_or(false) {
             error!(
                 "block_number" = result.block_number,
@@ -298,7 +296,7 @@ impl SP1AvailLightClientOperator {
     }
 
     /// Start the operator.
-    async fn run(&mut self, loop_delay_mins: u64) -> Result<()> {
+    async fn run(&mut self, job_delay: u64) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
         // Get the current slot from the contract
@@ -327,9 +325,9 @@ impl SP1AvailLightClientOperator {
         };
         let duration = start.elapsed();
 
-        info!("duration" = duration.as_secs(), "Loop finished");
+        info!("duration" = duration.as_secs(), "Job finished");
 
-        info!("Sleeping for {:?} minutes", loop_delay_mins);
+        info!("Sleeping for {:?} minutes", job_delay);
         Ok(())
     }
 
@@ -428,12 +426,12 @@ async fn main() -> Result<()> {
         .with(LevelFilter::from_str(&log_level)?)
         .init();
 
-    let loop_delay_mins = env::var("LOOP_DELAY_MINS")
+    let job_delay_mins = env::var("LOOP_DELAY_MINS")
         .unwrap_or("5".to_string())
         .parse()?;
 
     let mut operator = SP1AvailLightClientOperator::new().await;
-    if let Err(e) = operator.run(loop_delay_mins).await {
+    if let Err(e) = operator.run(job_delay_mins).await {
         error!("Error running operator: {}", e);
         return Err(anyhow!("Error running operator: {}", e));
     }
