@@ -189,6 +189,7 @@ impl SP1AvailLightClientOperator {
                     .prove(&self.pk, &stdin)
                     .groth16()
                     .strategy(FulfillmentStrategy::Auction)
+                    .min_auction_period(10)
                     .timeout(Duration::from_secs(900))
                     .run()?;
                 Ok(Some(proof))
