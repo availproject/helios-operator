@@ -305,7 +305,9 @@ impl SP1AvailLightClientOperator {
         info!("Current slot: {}", slot);
 
         // Fetch the checkpoint at that slot
-        let checkpoint = get_checkpoint(slot).await;
+        let mut checkpoint: alloy_primitives::aliases::B256 = get_checkpoint(slot).await;
+        // Hack solution to fix wrong block root calculation
+        checkpoint = alloy_primitives::aliases::B256::from_slice(hex!("9b9141d3c23f02ceb3fd5fac5ac4a299c7fd2ce2f3619270d973e5ce53ed18c9").as_slice());
 
         // Get the client from the checkpoint
         let client = get_client(checkpoint).await;
