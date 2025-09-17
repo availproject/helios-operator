@@ -2,7 +2,6 @@
 members = ["primitives", "script"]
 resolver = "2"
 
-
 [workspace.package]
 license = "MIT"
 edition = "2021"
@@ -13,9 +12,9 @@ authors = ["0xSasaPrsic"]
 sp1-helios-primitives = { path = "primitives" }
 
 # helios
-helios = { git = "https://github.com/a16z/helios", rev = "eda05b39886fd4ef4ad55f17291f25e45edab7f5" }
-helios-consensus-core = { git = "https://github.com/a16z/helios", rev = "eda05b39886fd4ef4ad55f17291f25e45edab7f5" }
-helios-ethereum = { git = "https://github.com/a16z/helios", rev = "eda05b39886fd4ef4ad55f17291f25e45edab7f5" }
+helios = { git = "https://github.com/a16z/helios", version = "0.9.0" }
+helios-consensus-core = { git = "https://github.com/a16z/helios", version = "0.9.0" }
+helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.9.0" }
 
 # general
 dotenv = "0.15.0"
