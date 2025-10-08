@@ -1,4 +1,3 @@
-
 use alloy::sol;
 use anyhow::{anyhow, Context, Result};
 use avail::vector::events as VectorEvent;
