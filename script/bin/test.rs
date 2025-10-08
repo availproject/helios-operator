@@ -1,20 +1,9 @@
-use alloy::hex::ToHex;
 use anyhow::Result;
-use clap::{command, Parser};
-use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
-use helios_consensus_core::types::BeaconBlock;
-use helios_ethereum::config::networks::Network;
-use helios_ethereum::config::Config;
-use helios_ethereum::consensus::Inner;
-use helios_ethereum::rpc::http_rpc::HttpRpc;
+use clap::{Parser};
 use helios_ethereum::rpc::ConsensusRpc;
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::{get_checkpoint, get_client, get_latest_checkpoint, get_updates};
 use sp1_sdk::{utils::setup_logger, ProverClient, SP1Stdin};
-use std::sync::Arc;
-use tokio::sync::mpsc::channel;
-use tokio::sync::watch;
-use url::Url;
 
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Get the genesis parameters from a block.")]

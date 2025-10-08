@@ -1,4 +1,3 @@
-mod test;
 
 use alloy::sol;
 use anyhow::{anyhow, Context, Result};
