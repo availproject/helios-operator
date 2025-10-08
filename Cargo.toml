@@ -12,9 +12,9 @@ authors = ["0xSasaPrsic"]
 sp1-helios-primitives = { path = "primitives" }
 
 # helios
-helios = { git = "https://github.com/a16z/helios", version = "0.9.0" }
-helios-consensus-core = { git = "https://github.com/a16z/helios", version = "0.9.0" }
-helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.9.0" }
+helios = { git = "https://github.com/a16z/helios", version = "0.9.3" }
+helios-consensus-core = { git = "https://github.com/a16z/helios", version = "0.9.3" }
+helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.9.3" }
 
 # general
 dotenv = "0.15.0"
@@ -42,6 +42,8 @@ cargo_metadata = "0.18"
 avail-rust = { git = "https://github.com/availproject/avail-rust.git", rev = "24c3df1f703eb6bbea58a62f0a89bab3bd56a58b" }
 jsonrpsee = { version = "0.26.0", features = ["http-client", "macros", "async-client"] }
 sp-core = { version = "21.0.0" }
+# dependency fix for RetryTransientMiddleware
+reqwest-retry = "0.8"
 
 [patch.crates-io]
 sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.9.9-sp1-4.0.0" }
