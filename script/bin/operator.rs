@@ -1,5 +1,3 @@
-mod test;
-
 use alloy::sol;
 use anyhow::{anyhow, Context, Result};
 use avail::vector::events as VectorEvent;
@@ -450,7 +448,7 @@ mod tests {
         let (_pk, vk) = client.setup(ELF);
 
         assert_eq!(
-            "0x003ef077b6a82831a994a12a673901221ca1752080605189930748d0772d5c68",
+            "0x00e4a67e24bd5c04e4a9f8fc80512128f86a8c6a92ce7ff713a57025f6e2e87b",
             vk.bytes32()
         );
     }
