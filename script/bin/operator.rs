@@ -456,7 +456,7 @@ mod tests {
         let (_pk, vk) = client.setup(ELF);
 
         assert_eq!(
-            "0x00b1c2cbe88f16114ce15080d0130a48aea79963f73ad246317f3382e4842f08",
+            "0x0075d6f4f88a23c736b22799f725b7fe45cd25d4ddb6933c328bf8608f3a5e22",
             vk.bytes32()
         );
     }
