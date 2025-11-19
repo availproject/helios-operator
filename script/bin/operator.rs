@@ -12,7 +12,7 @@ use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedV
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
 use avail_rust::{avail, Keypair, Options, SecretUri, H256, SDK};
-use jsonrpsee::tracing::{error, info};
+use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{
     core::client::ClientT,
     http_client::{HttpClient, HttpClientBuilder},
@@ -129,7 +129,15 @@ impl SP1AvailLightClientOperator {
         if latest_block <= head {
             info!("Contract is up to date. Nothing to update.");
             return Ok(None);
+        } else if !latest_block.is_multiple_of(32) {
+            warn!("Attempted to commit to a non-checkpoint slot: {latest_block}. Skipping update.");
+            return Ok(None);
         }
+
+        info!(
+            "New head to update Slot: {:?} from Head: {:?}",
+            latest_block, head
+        );
 
         // Optimization:
         // Skip processing update inside program if next_sync_committee is already stored in contract.
@@ -144,7 +152,7 @@ impl SP1AvailLightClientOperator {
             );
 
             if contract_next_sync_committee == next_sync_committee {
-                println!("Applying optimization, skipping update");
+                info!("Applying optimization, skipping update");
                 let temp_update = sync_committee_updates.remove(0);
 
                 client
