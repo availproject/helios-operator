@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
     let slot = 8985920;
-    // Get the current slot from the contract or fetch the latest checkpoint
+    // Test checkpoint slot
     let checkpoint = get_checkpoint(slot).await;
 
     // Setup client.
