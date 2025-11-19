@@ -2632,8 +2632,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43d193de1f7487df1914d3a568b772458861d33f9c54249612cc2893d6915054"
 dependencies = [
  "bitcoin_hashes 0.13.0",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
  "serde",
  "unicode-normalization",
 ]
@@ -6541,8 +6541,8 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "helios-common"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "async-trait",
@@ -6557,8 +6557,8 @@ dependencies = [
 
 [[package]]
 name = "helios-consensus-core"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -6582,8 +6582,8 @@ dependencies = [
 
 [[package]]
 name = "helios-core"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "alloy-trie",
@@ -6612,8 +6612,8 @@ dependencies = [
 
 [[package]]
 name = "helios-ethereum"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "alloy-trie",
@@ -6650,8 +6650,8 @@ dependencies = [
 
 [[package]]
 name = "helios-revm-utils"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "eyre",
@@ -6665,8 +6665,8 @@ dependencies = [
 
 [[package]]
 name = "helios-verifiable-api-client"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "async-trait",
@@ -6684,8 +6684,8 @@ dependencies = [
 
 [[package]]
 name = "helios-verifiable-api-types"
-version = "0.9.3"
-source = "git+https://github.com/a16z/helios#c6340a4914d7a6ab4be793cb3e2e2e3695d50112"
+version = "0.10.2"
+source = "git+https://github.com/a16z/helios#5276792966250d9c542d69b29a1087f767018b56"
 dependencies = [
  "alloy",
  "helios-common",
@@ -11077,8 +11077,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e69bf016dc406eff7d53a7d3f7cf1c2e72c82b9088aac1118591e36dd2cd3e9"
 dependencies = [
  "bitcoin_hashes 0.13.0",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
  "serde",
  "unicode-normalization",
 ]
@@ -12876,10 +12876,11 @@ checksum = "6b3789b30bd25ba102de4beabd95d21ac45b69b1be7d14522bab988c526d6799"
 
 [[package]]
 name = "retri"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6262146231c1ef2e31ad7b2a2492bc652fafd6b76568da7b63ac1d5f3674ee4"
+checksum = "c38316070fbd6504dcbb6042225f2608f2323c71155836c9b48f192113f68782"
 dependencies = [
+ "tokio",
  "zduny-wasm-timer",
 ]
 
@@ -18294,7 +18295,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
- "rand 0.8.5",
+ "rand 0.7.3",
  "static_assertions",
 ]
 
