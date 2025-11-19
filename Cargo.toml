@@ -12,9 +12,9 @@ authors = ["0xSasaPrsic"]
 sp1-helios-primitives = { path = "primitives" }
 
 # helios
-helios = { git = "https://github.com/a16z/helios", version = "0.9.3" }
-helios-consensus-core = { git = "https://github.com/a16z/helios", version = "0.9.3" }
-helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.9.3" }
+helios = { git = "https://github.com/a16z/helios", version = "0.10.2" }
+helios-consensus-core = { git = "https://github.com/a16z/helios", version = "0.10.2" }
+helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.10.2" }
 
 # general
 dotenv = "0.15.0"
