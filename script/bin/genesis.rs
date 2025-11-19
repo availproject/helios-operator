@@ -76,6 +76,13 @@ pub async fn main() -> Result<()> {
         .beacon()
         .tree_hash_root();
     let head = helios_client.store.finalized_header.clone().beacon().slot;
+
+    // prevents genesis to have a slot that is not checkpoint.
+    assert!(
+        head.is_multiple_of(32),
+        "Head is not a checkpoint slot, please deploy again."
+    );
+
     let sync_committee_hash = helios_client
         .store
         .current_sync_committee
