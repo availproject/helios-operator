@@ -118,21 +118,55 @@ impl SP1AvailLightClientOperator {
 
         // Setup client.
         let mut sync_committee_updates = get_updates(&client).await;
-        let finality_update = client
-            .rpc
-            .get_finality_update()
-            .await
-            .expect("RPC get_finality_update failed");
 
-        // Check if contract is up to date
+        // Retry configuration for non-checkpoint slots
+        let retry_threshold_mins: u64 = env::var("RETRY_THRESHOLD")
+            .unwrap_or("5".to_string())
+            .parse()?;
+        let max_retries: u32 = env::var("MAX_RETRIES")
+            .unwrap_or("3".to_string())
+            .parse()?;
+
+        // Retry loop for getting a valid checkpoint slot
+        let mut retry_count: u32 = 0;
+        let finality_update = loop {
+            let finality_update = client
+                .rpc
+                .get_finality_update()
+                .await
+                .expect("RPC get_finality_update failed");
+
+            let latest_block = finality_update.finalized_header().beacon().slot;
+
+            // Check if contract is up to date - this is expected, no retry needed
+            if latest_block <= head {
+                info!("Contract is up to date. Nothing to update.");
+                return Ok(None);
+            }
+
+            // Check if it's a checkpoint slot (multiple of 32)
+            if latest_block.is_multiple_of(32) {
+                break finality_update;
+            }
+
+            // Non-checkpoint slot - apply retry logic
+            retry_count += 1;
+            if retry_count > max_retries {
+                warn!(
+                    "Max retries ({}) exceeded for non-checkpoint slot: {}. Giving up.",
+                    max_retries, latest_block
+                );
+                return Ok(None);
+            }
+
+            warn!(
+                "Attempted to commit to a non-checkpoint slot: {}. Retry {}/{}. Waiting {} minutes...",
+                latest_block, retry_count, max_retries, retry_threshold_mins
+            );
+            tokio::time::sleep(Duration::from_secs(retry_threshold_mins * 60)).await;
+        };
+
         let latest_block = finality_update.finalized_header().beacon().slot;
-        if latest_block <= head {
-            info!("Contract is up to date. Nothing to update.");
-            return Ok(None);
-        } else if !latest_block.is_multiple_of(32) {
-            warn!("Attempted to commit to a non-checkpoint slot: {latest_block}. Skipping update.");
-            return Ok(None);
-        }
 
         info!(
             "New head to update Slot: {:?} from Head: {:?}",
