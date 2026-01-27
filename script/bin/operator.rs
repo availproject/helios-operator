@@ -123,9 +123,7 @@ impl SP1AvailLightClientOperator {
         let retry_threshold_mins: u64 = env::var("RETRY_THRESHOLD")
             .unwrap_or("5".to_string())
             .parse()?;
-        let max_retries: u32 = env::var("MAX_RETRIES")
-            .unwrap_or("3".to_string())
-            .parse()?;
+        let max_retries: u32 = env::var("MAX_RETRIES").unwrap_or("3".to_string()).parse()?;
 
         // Retry loop for getting a valid checkpoint slot
         let mut retry_count: u32 = 0;
