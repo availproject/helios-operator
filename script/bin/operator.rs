@@ -6,8 +6,6 @@ use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
-use crate::SP1Helios::ProofOutputs;
-use alloy::sol_types::SolValue;
 use alloy_primitives::hex;
 use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
@@ -239,20 +237,6 @@ impl SP1AvailLightClientOperator {
                 Ok(Some(proof))
             };
             info!("Generate proof end");
-
-            let proof_outputs: ProofOutputs =
-                SolValue::abi_decode(proof.public_values.as_slice(), true)
-                    .context("Cannot decode public values")?;
-            let new_slot: u64 = proof_outputs.newHead.to();
-            if new_slot <= head {
-                tracing::warn!(
-                    message = "New slot is <= from the current, skipping update",
-                    current_slot = head,
-                    new_slot = new_slot
-                );
-                return Ok(None);
-            }
-
             info!("Attempting to update to new head block: {:?}", latest_block);
 
             proof
