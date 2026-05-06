@@ -18,7 +18,7 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
-    let slot = 8985920;
+    let slot = 10193087;
     // Test checkpoint slot
     let checkpoint = get_checkpoint(slot).await;
 
