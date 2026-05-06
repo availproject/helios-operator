@@ -1,5 +1,3 @@
-mod test;
-
 use alloy::sol;
 use anyhow::{anyhow, Context, Result};
 use avail::vector::events as VectorEvent;
@@ -8,15 +6,13 @@ use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
-use crate::SP1Helios::ProofOutputs;
-use alloy::sol_types::SolValue;
 use alloy_primitives::hex;
 use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
 use avail_rust::{avail, Keypair, Options, SecretUri, H256, SDK};
-use jsonrpsee::tracing::{error, info};
+use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{
     core::client::ClientT,
     http_client::{HttpClient, HttpClientBuilder},
@@ -24,9 +20,8 @@ use jsonrpsee::{
 };
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
-use sp1_sdk::{
-    NetworkProver, Prover, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin,
-};
+use sp1_sdk::network::FulfillmentStrategy;
+use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -38,7 +33,7 @@ use tree_hash::TreeHash;
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
-    client: NetworkProver,
+    env_prover: EnvProver,
     avail_client: HttpClient,
     pk: SP1ProvingKey,
 }
@@ -86,8 +81,9 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let client = ProverClient::builder().network().build();
-        let (pk, _) = client.setup(ELF);
+        let env_prover = ProverClient::from_env();
+
+        let (pk, _) = env_prover.setup(ELF);
 
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
@@ -95,7 +91,7 @@ impl SP1AvailLightClientOperator {
             .expect("Could not create RPC client");
 
         Self {
-            client,
+            env_prover,
             avail_client,
             pk,
         }
@@ -122,18 +118,58 @@ impl SP1AvailLightClientOperator {
 
         // Setup client.
         let mut sync_committee_updates = get_updates(&client).await;
-        let finality_update = client
-            .rpc
-            .get_finality_update()
-            .await
-            .expect("RPC get_finality_update failed");
 
-        // Check if contract is up to date
+        // Retry configuration for non-checkpoint slots
+        let retry_threshold_mins: u64 = env::var("RETRY_THRESHOLD")
+            .unwrap_or("5".to_string())
+            .parse()?;
+        let max_retries: u32 = env::var("MAX_RETRIES").unwrap_or("3".to_string()).parse()?;
+
+        // Retry loop for getting a valid checkpoint slot
+        let mut retry_count: u32 = 0;
+        let finality_update = loop {
+            let finality_update = client
+                .rpc
+                .get_finality_update()
+                .await
+                .expect("RPC get_finality_update failed");
+
+            let latest_block = finality_update.finalized_header().beacon().slot;
+
+            // Check if contract is up to date - this is expected, no retry needed
+            if latest_block <= head {
+                info!("Contract is up to date. Nothing to update.");
+                return Ok(None);
+            }
+
+            // Check if it's a checkpoint slot (multiple of 32)
+            if latest_block.is_multiple_of(32) {
+                break finality_update;
+            }
+
+            // Non-checkpoint slot - apply retry logic
+            retry_count += 1;
+            if retry_count > max_retries {
+                warn!(
+                    "Max retries ({}) exceeded for non-checkpoint slot: {}. Giving up.",
+                    max_retries, latest_block
+                );
+                return Ok(None);
+            }
+
+            warn!(
+                "Attempted to commit to a non-checkpoint slot: {}. Retry {}/{}. Waiting {} minutes...",
+                latest_block, retry_count, max_retries, retry_threshold_mins
+            );
+            tokio::time::sleep(Duration::from_secs(retry_threshold_mins * 60)).await;
+        };
+
         let latest_block = finality_update.finalized_header().beacon().slot;
-        if latest_block <= head {
-            info!("Contract is up to date. Nothing to update.");
-            return Ok(None);
-        }
+
+        info!(
+            "New head to update Slot: {:?} from Head: {:?}",
+            latest_block, head
+        );
 
         // Optimization:
         // Skip processing update inside program if next_sync_committee is already stored in contract.
@@ -148,7 +184,7 @@ impl SP1AvailLightClientOperator {
             );
 
             if contract_next_sync_committee == next_sync_committee {
-                println!("Applying optimization, skipping update");
+                info!("Applying optimization, skipping update");
                 let temp_update = sync_committee_updates.remove(0);
 
                 client
@@ -172,7 +208,6 @@ impl SP1AvailLightClientOperator {
         stdin.write_slice(&encoded_proof_inputs);
 
         info!("Generate proof start");
-        // Generate proof.
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
         if mock {
             info!("Using mock prover");
@@ -180,32 +215,31 @@ impl SP1AvailLightClientOperator {
             let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
             Ok(Some(proof))
         } else {
-            let balance = self.client.get_balance().await?;
-            info!(message = "Available balance", balance = balance.to_string());
+            let spn = env::var("SP1_PROVER")?.to_lowercase() == "network";
 
-            let proof = self
-                .client
-                .prove(&self.pk, &stdin)
-                .groth16()
-                .timeout(Duration::from_secs(900))
-                .run()?;
+            let proof = if spn {
+                info!("Using spn network prover");
+                let spn_client = ProverClient::builder().network().build();
+                let balance = spn_client.get_balance().await?;
+                info!(message = "Available balance", balance = balance.to_string());
+                let proof = spn_client
+                    .prove(&self.pk, &stdin)
+                    .groth16()
+                    .strategy(FulfillmentStrategy::Auction)
+                    .min_auction_period(10)
+                    .timeout(Duration::from_secs(900))
+                    .run()?;
+                Ok(Some(proof))
+            } else {
+                info!("Using predefined prover");
+
+                let proof = self.env_prover.prove(&self.pk, &stdin).groth16().run()?;
+                Ok(Some(proof))
+            };
             info!("Generate proof end");
-
-            let proof_outputs: ProofOutputs =
-                SolValue::abi_decode(proof.public_values.as_slice(), true)
-                    .context("Cannot decode public values")?;
-            let new_slot: u64 = proof_outputs.newHead.to();
-            if new_slot <= head {
-                tracing::warn!(
-                    message = "New slot is <= from the current, skipping update",
-                    current_slot = head,
-                    new_slot = new_slot
-                );
-                return Ok(None);
-            }
-
             info!("Attempting to update to new head block: {:?}", latest_block);
-            Ok(Some(proof))
+
+            proof
         }
     }
 
@@ -214,7 +248,6 @@ impl SP1AvailLightClientOperator {
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
 
         let proof_as_bytes = if mock { vec![] } else { proof.bytes() };
-
         let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
         let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
         let secret_uri = SecretUri::from_str(secret.as_str())?;
@@ -258,7 +291,6 @@ impl SP1AvailLightClientOperator {
                 .expect("Transaction must be executed!")
         };
 
-        // if tx failed throw an error and retry
         if !result.is_successful().unwrap_or(false) {
             error!(
                 "block_number" = result.block_number,
@@ -302,42 +334,39 @@ impl SP1AvailLightClientOperator {
     }
 
     /// Start the operator.
-    async fn run(&mut self, loop_delay_mins: u64) -> Result<()> {
+    async fn run(&mut self, job_delay: u64) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
-        loop {
-            // Get the current slot from the contract
-            let start = Instant::now();
-            let slot = self.get_head().await?;
-            info!("Current slot: {}", slot);
+        // Get the current slot from the contract
+        let start = Instant::now();
+        let slot = self.get_head().await?;
+        info!("Current slot: {}", slot);
 
-            // Fetch the checkpoint at that slot
-            let checkpoint = get_checkpoint(slot).await;
+        // Fetch the checkpoint at that slot
+        let checkpoint = get_checkpoint(slot).await;
 
-            // Get the client from the checkpoint
-            let client = get_client(checkpoint).await;
+        // Get the client from the checkpoint
+        let client = get_client(checkpoint).await;
 
-            // Request an update
-            match self.request_update(client).await {
-                Ok(Some(proof)) => {
-                    self.relay_vector_update(proof).await?;
-                }
-                Ok(None) => {
-                    // Contract is up to date. Nothing to update.
-                }
-                Err(e) => {
-                    error!("Request for update failed: {}", e);
-                    info!("Retrying...");
-                    continue;
-                }
-            };
-            let duration = start.elapsed();
+        // Request an update
+        match self.request_update(client).await {
+            Ok(Some(proof)) => {
+                self.relay_vector_update(proof).await?;
+            }
+            Ok(None) => {
+                // Contract is up to date. Nothing to update.
+            }
+            Err(e) => {
+                error!("Request for update failed: {}", e);
+                return Err(e);
+            }
+        };
+        let duration = start.elapsed();
 
-            info!("duration" = duration.as_secs(), "Loop finished");
+        info!("duration" = duration.as_secs(), "Job finished");
 
-            info!("Sleeping for {:?} minutes", loop_delay_mins);
-            tokio::time::sleep(tokio::time::Duration::from_secs(60 * loop_delay_mins)).await;
-        }
+        info!("Sleeping for {:?} minutes", job_delay);
+        Ok(())
     }
 
     /// get_head reads head from the Avail chain
@@ -435,16 +464,16 @@ async fn main() -> Result<()> {
         .with(LevelFilter::from_str(&log_level)?)
         .init();
 
-    let loop_delay_mins = env::var("LOOP_DELAY_MINS")
+    let job_delay_mins = env::var("LOOP_DELAY_MINS")
         .unwrap_or("5".to_string())
         .parse()?;
 
     let mut operator = SP1AvailLightClientOperator::new().await;
-    loop {
-        if let Err(e) = operator.run(loop_delay_mins).await {
-            error!("Error running operator: {}", e);
-        }
+    if let Err(e) = operator.run(job_delay_mins).await {
+        error!("Error running operator: {}", e);
+        return Err(anyhow!("Error running operator: {}", e));
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -459,7 +488,7 @@ mod tests {
         let (_pk, vk) = client.setup(ELF);
 
         assert_eq!(
-            "0x003ef077b6a82831a994a12a673901221ca1752080605189930748d0772d5c68",
+            "0x0075d6f4f88a23c736b22799f725b7fe45cd25d4ddb6933c328bf8608f3a5e22",
             vk.bytes32()
         );
     }

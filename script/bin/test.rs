@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{command, Parser};
+use clap::Parser;
 use helios_ethereum::rpc::ConsensusRpc;
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::{get_checkpoint, get_client, get_updates};
@@ -18,15 +18,9 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
-    let args = GenesisArgs::parse();
-
-    // Get the current slot from the contract or fetch the latest checkpoint
-    let checkpoint = if let Some(slot) = args.slot {
-        get_checkpoint(slot).await
-    } else {
-        // test slot
-        get_checkpoint(7121216).await
-    };
+    let slot = 10193088;
+    // Test checkpoint slot
+    let checkpoint = get_checkpoint(slot).await;
 
     // Setup client.
     let helios_client = get_client(checkpoint).await;
@@ -49,7 +43,7 @@ async fn main() -> Result<()> {
 
     let prover_client = ProverClient::builder().cpu().build();
     let (_, report) = prover_client.execute(ELF, &stdin).run()?;
-    println!("Execution Report: {:?}", report);
+    println!("Execution Report: {report:?}");
 
     Ok(())
 }
