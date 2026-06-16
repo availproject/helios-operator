@@ -26,13 +26,18 @@ pub async fn get_updates(
     let period =
         calc_sync_period::<MainnetConsensusSpec>(client.store.finalized_header.beacon().slot);
 
-    let updates = client
+    let mut updates = client
         .rpc
         .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
         .await
         .unwrap();
 
-    updates.clone()
+    updates.retain(|u| {
+        calc_sync_period::<MainnetConsensusSpec>(u.attested_header().beacon().slot) >= period
+    });
+    updates.sort_by_key(|u| u.attested_header().beacon().slot);
+
+    updates
 }
 
 /// Fetch latest checkpoint from chain to bootstrap client to the latest state.
