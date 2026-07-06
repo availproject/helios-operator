@@ -21,7 +21,10 @@ use jsonrpsee::{
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::*;
 use sp1_sdk::network::FulfillmentStrategy;
-use sp1_sdk::{EnvProver, ProverClient, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{
+    env::{EnvProver, EnvProvingKey},
+    ProveRequest, Prover, ProverClient, SP1ProofWithPublicValues, SP1Stdin,
+};
 use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -35,7 +38,7 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 struct SP1AvailLightClientOperator {
     env_prover: EnvProver,
     avail_client: HttpClient,
-    pk: SP1ProvingKey,
+    pk: EnvProvingKey,
 }
 
 sol! {
@@ -81,9 +84,12 @@ impl SP1AvailLightClientOperator {
 
         let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
 
-        let env_prover = ProverClient::from_env();
+        let env_prover = ProverClient::from_env().await;
 
-        let (pk, _) = env_prover.setup(ELF);
+        let pk = env_prover
+            .setup(ELF.into())
+            .await
+            .expect("Failed to setup proving key");
 
         let avail_client = HttpClientBuilder::default()
             .max_concurrent_requests(1024)
@@ -211,29 +217,31 @@ impl SP1AvailLightClientOperator {
         let mock = env::var("SP1_PROVER")?.to_lowercase() == "mock";
         if mock {
             info!("Using mock prover");
-            let prover_client = ProverClient::builder().mock().build();
-            let proof = prover_client.prove(&self.pk, &stdin).groth16().run()?;
+            let prover_client = ProverClient::builder().mock().build().await;
+            let pk = prover_client.setup(ELF.into()).await?;
+            let proof = prover_client.prove(&pk, stdin).groth16().await?;
             Ok(Some(proof))
         } else {
             let spn = env::var("SP1_PROVER")?.to_lowercase() == "network";
 
             let proof = if spn {
                 info!("Using spn network prover");
-                let spn_client = ProverClient::builder().network().build();
+                let spn_client = ProverClient::builder().network().build().await;
+                let pk = spn_client.setup(ELF.into()).await?;
                 let balance = spn_client.get_balance().await?;
                 info!(message = "Available balance", balance = balance.to_string());
                 let proof = spn_client
-                    .prove(&self.pk, &stdin)
+                    .prove(&pk, stdin)
                     .groth16()
                     .strategy(FulfillmentStrategy::Auction)
                     .min_auction_period(10)
                     .timeout(Duration::from_secs(900))
-                    .run()?;
+                    .await?;
                 Ok(Some(proof))
             } else {
                 info!("Using predefined prover");
 
-                let proof = self.env_prover.prove(&self.pk, &stdin).groth16().run()?;
+                let proof = self.env_prover.prove(&self.pk, stdin).groth16().await?;
                 Ok(Some(proof))
             };
             info!("Generate proof end");
@@ -480,15 +488,16 @@ async fn main() -> Result<()> {
 mod tests {
     use crate::ELF;
     use sp1_sdk::Prover;
-    use sp1_sdk::{HashableKey, ProverClient};
+    use sp1_sdk::{HashableKey, ProverClient, ProvingKey};
 
-    #[test]
-    fn test_program_verification_key() {
-        let client = ProverClient::builder().cpu().build();
-        let (_pk, vk) = client.setup(ELF);
+    #[tokio::test]
+    async fn test_program_verification_key() {
+        let client = ProverClient::builder().cpu().build().await;
+        let pk = client.setup(ELF.into()).await.unwrap();
+        let vk = pk.verifying_key();
 
         assert_eq!(
-            "0x0075d6f4f88a23c736b22799f725b7fe45cd25d4ddb6933c328bf8608f3a5e22",
+            "0x009d8e35ffb5ad38309a0b225014043ba7c1e4a93defc98f95c626cd6a493d64",
             vk.bytes32()
         );
     }

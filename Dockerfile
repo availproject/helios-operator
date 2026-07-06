@@ -4,7 +4,7 @@ COPY . .
 ARG BUILD_PROFILE=maxperf
 
 RUN apt update && apt install -y \
-    make libssl-dev pkg-config libfindbin-libs-perl llvm clang \
+    make libssl-dev pkg-config libfindbin-libs-perl llvm clang protobuf-compiler \
     && cargo build --profile $BUILD_PROFILE --bin operator --locked \
     && cp /build/target/$BUILD_PROFILE/operator /build/helios-operator
 

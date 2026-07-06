@@ -18,8 +18,8 @@ helios-ethereum = { git = "https://github.com/a16z/helios", version = "0.10.2" }
 
 # general
 dotenv = "0.15.0"
-sp1-sdk = { version = "5.2.1", default-features = false, features = ["network"] }
-sp1-build = "5.0.0"
+sp1-sdk = { version = "6.3.0", default-features = false, features = ["network"] }
+sp1-build = "6.3.0"
 tokio = "1.38.0"
 serde = "1.0.203"
 url = { version = "2.5.2", features = ["serde"] }
@@ -45,11 +45,12 @@ jsonrpsee = { version = "0.26.0", features = ["http-client", "macros", "async-cl
 sp-core = { version = "21.0.0" }
 
 [patch.crates-io]
-sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.9.9-sp1-4.0.0" }
-sha2-v0-10-8 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.10.8-sp1-4.0.0" }
-sha3-v0-10-8 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha3", tag = "patch-sha3-0.10.8-sp1-4.0.0" }
-tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch-2.0.2-sp1-4.0.0" }
-bls12_381 = { git = "https://github.com/sp1-patches/bls12_381", tag = "patch-0.8.0-sp1-5.0.0-v2" }
+# NOTE: The SP1 precompile patches (sha2/sha3/tiny-keccak/bls12_381) only matter for the
+# zkVM *guest* program (built in the helios-sp1 program repo), where they accelerate crypto
+# inside the proof. The operator is a host binary that only builds inputs and calls sp1-sdk,
+# so it does not need them. For SP1 v6 they are actively harmful here: the v6 bls12_381 patch
+# requires sha2 0.10 while helios uses sha2 0.9, which fails to compile. Use helios' stock
+# crypto stack on the host instead.
 # From upstream: https://github.com/a16z/helios/blob/master/Cargo.toml#L115
 ethereum_hashing = { git = "https://github.com/ncitron/ethereum_hashing", rev = "7ee70944ed4fabe301551da8c447e4f4ae5e6c35" }
 
