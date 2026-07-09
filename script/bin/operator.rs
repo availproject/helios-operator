@@ -492,7 +492,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_program_verification_key() {
-        let client = ProverClient::builder().cpu().build().await;
+        let client = ProverClient::builder().mock().build().await;
         let pk = client.setup(ELF.into()).await.unwrap();
         let vk = pk.verifying_key();
 
