@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use sp1_helios_script::{get_checkpoint, get_client, get_latest_checkpoint};
-use sp1_sdk::{utils, HashableKey, Prover, ProverClient};
+use sp1_sdk::{utils, HashableKey, Prover, ProverClient, ProvingKey};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -58,8 +58,9 @@ pub async fn main() -> Result<()> {
         );
     }
 
-    let client = ProverClient::builder().cpu().build();
-    let (_pk, vk) = client.setup(HELIOS_ELF);
+    let client = ProverClient::builder().cpu().build().await;
+    let pk = client.setup(HELIOS_ELF.into()).await?;
+    let vk = pk.verifying_key();
 
     let checkpoint;
     if let Some(temp_slot) = args.slot {

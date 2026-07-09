@@ -1,10 +1,10 @@
-FROM rust:1.89.0-slim AS builder
+FROM rust:1.90.0-slim AS builder
 WORKDIR /build
 COPY . .
 ARG BUILD_PROFILE=maxperf
 
 RUN apt update && apt install -y \
-    make libssl-dev pkg-config libfindbin-libs-perl llvm clang \
+    make libssl-dev pkg-config libfindbin-libs-perl llvm clang protobuf-compiler \
     && cargo build --profile $BUILD_PROFILE --bin operator --locked \
     && cp /build/target/$BUILD_PROFILE/operator /build/helios-operator
 

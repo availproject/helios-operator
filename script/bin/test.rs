@@ -3,7 +3,7 @@ use clap::Parser;
 use helios_ethereum::rpc::ConsensusRpc;
 use sp1_helios_primitives::types::ProofInputs;
 use sp1_helios_script::{get_checkpoint, get_client, get_updates};
-use sp1_sdk::{utils::setup_logger, ProverClient, SP1Stdin};
+use sp1_sdk::{utils::setup_logger, Prover, ProverClient, SP1Stdin};
 
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Get the genesis parameters from a block.")]
@@ -18,7 +18,7 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
-    let slot = 10193088;
+    let slot = 10517600;
     // Test checkpoint slot
     let checkpoint = get_checkpoint(slot).await;
 
@@ -41,8 +41,8 @@ async fn main() -> Result<()> {
     let mut stdin = SP1Stdin::new();
     stdin.write_slice(&serde_cbor::to_vec(&inputs)?);
 
-    let prover_client = ProverClient::builder().cpu().build();
-    let (_, report) = prover_client.execute(ELF, &stdin).run()?;
+    let prover_client = ProverClient::builder().cpu().build().await;
+    let (_, report) = prover_client.execute(ELF.into(), stdin).await?;
     println!("Execution Report: {report:?}");
 
     Ok(())
