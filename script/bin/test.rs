@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let mut stdin = SP1Stdin::new();
     stdin.write_slice(&serde_cbor::to_vec(&inputs)?);
 
-    let prover_client = ProverClient::builder().mock().build().await;
+    let prover_client = ProverClient::builder().cpu().build().await;
     let (_, report) = prover_client.execute(ELF.into(), stdin).await?;
     println!("Execution Report: {report:?}");
 
