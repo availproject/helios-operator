@@ -7,11 +7,10 @@ use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
 use alloy_primitives::hex;
-use alloy_primitives::hex::ToHexExt;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
 use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::{avail, Keypair, Options, SecretUri, H256, SDK};
+use avail_rust::{avail, Keypair, Options, SecretUri, SDK};
 use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{
     core::client::ClientT,
@@ -31,7 +30,6 @@ use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tree_hash::TreeHash;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 // Skip problematic slot
@@ -106,24 +104,17 @@ impl SP1AvailLightClientOperator {
     /// Fetch values and generate an 'update' proof for the SP1 Helios contract.
     async fn request_update(
         &mut self,
-        mut client: Inner<MainnetConsensusSpec, HttpRpc>,
+        client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
         // head is initialised
         let head = self.get_head().await?;
 
-        let slot_per_period = env::var("SLOTS_PER_PERIOD")
-            .unwrap_or("8192".to_string())
-            .parse::<u64>()?;
-
         info!("Head/Slot {}", head);
-
-        let period = head / slot_per_period;
-        let contract_next_sync_committee = self.get_sync_committee(period + 1).await?;
 
         let mut stdin = SP1Stdin::new();
 
         // Setup client.
-        let mut sync_committee_updates = get_updates(&client).await;
+        let sync_committee_updates = get_updates(&client).await;
 
         // Retry configuration for non-checkpoint slots
         let retry_threshold_mins: u64 = env::var("RETRY_THRESHOLD")
@@ -176,29 +167,6 @@ impl SP1AvailLightClientOperator {
             "New head to update Slot: {:?} from Head: {:?}",
             latest_block, head
         );
-
-        // Optimization:
-        // Skip processing update inside program if next_sync_committee is already stored in contract.
-        // We must still apply the update locally to "sync" the helios client, this is due to
-        // next_sync_committee not being stored when the helios client is bootstrapped.
-        if !sync_committee_updates.is_empty() {
-            let next_sync_committee = H256::from_slice(
-                sync_committee_updates[0]
-                    .next_sync_committee()
-                    .tree_hash_root()
-                    .as_ref(),
-            );
-
-            if contract_next_sync_committee == next_sync_committee {
-                info!("Applying optimization, skipping update");
-                let temp_update = sync_committee_updates.remove(0);
-
-                client
-                    .verify_update(&temp_update)
-                    .expect("Verify update validation error!");
-                client.apply_update(&temp_update);
-            }
-        }
 
         // Create program inputs
         let expected_current_slot = client.expected_current_slot();
@@ -411,48 +379,6 @@ impl SP1AvailLightClientOperator {
             Decode::decode(&mut slot_from_hex.as_slice()).expect("Must decode slot from hex!");
         Ok(slot)
     }
-
-    /// get_sync_committee reads sync committee hash from a chain so it can use later to apply updates
-    async fn get_sync_committee(&mut self, period: u64) -> Result<H256> {
-        let pallet = "Vector";
-        let sync_committee_hash = "SyncCommitteeHashes";
-
-        let finalized_block_hash_str: String = self
-            .avail_client
-            .request("chain_getFinalizedHead", rpc_params![])
-            .await
-            .expect("finalized head");
-
-        info!("Finalized head: {}", finalized_block_hash_str);
-
-        let sync_committee_key = format!(
-            "0x{}{}{}",
-            hex::encode(twox_128(pallet.as_bytes())),
-            hex::encode(twox_128(sync_committee_hash.as_bytes())),
-            hex::encode(period.to_le_bytes())
-        );
-
-        info!("Next period (current_period + 1) {}", period);
-
-        let sync_committee_hash: String = self
-            .avail_client
-            .request(
-                "state_getStorage",
-                rpc_params![sync_committee_key, finalized_block_hash_str.clone()],
-            )
-            .await
-            .unwrap_or(H256::zero().encode_hex());
-
-        // sync committee must be initialized for the start period
-        let sync_committee_hash = sp_core::bytes::from_hex(sync_committee_hash.as_str())
-            .context("parse sync_committee_hash")?;
-        let hash: H256 = Decode::decode(&mut sync_committee_hash.as_slice())
-            .context("Decode sync_committee_hash")?;
-
-        info!("Sync committee hash: {}", hash);
-
-        Ok(H256(hash.into()))
-    }
 }
 
 #[tokio::main]
@@ -492,12 +418,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_program_verification_key() {
-        let client = ProverClient::builder().cpu().build().await;
+        let client = ProverClient::builder().mock().build().await;
         let pk = client.setup(ELF.into()).await.unwrap();
         let vk = pk.verifying_key();
 
         assert_eq!(
-            "0x003c9ecfe3b5678b34eccbc399ef1bb99c0e965075fcf0fbfaaa0e738eb76fff",
+            "0x00e18a60339ccc23cb2f6ce86aade5cf22f5e9a352053a9cf5cf47c784fcd050",
             vk.bytes32()
         );
     }

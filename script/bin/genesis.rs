@@ -58,7 +58,7 @@ pub async fn main() -> Result<()> {
         );
     }
 
-    let client = ProverClient::builder().cpu().build().await;
+    let client = ProverClient::builder().mock().build().await;
     let pk = client.setup(HELIOS_ELF.into()).await?;
     let vk = pk.verifying_key();
 
