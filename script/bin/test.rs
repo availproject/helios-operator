@@ -20,8 +20,9 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
-    // Test checkpoint slot
-    let slot = GenesisArgs::parse().slot.unwrap_or(10517600);
+    // Test checkpoint slot: a post-Gloas Sepolia checkpoint (epoch 353462). The beacon node must
+    // still serve its light-client bootstrap and updates, so move it forward when it ages out.
+    let slot = GenesisArgs::parse().slot.unwrap_or(11310784);
     let checkpoint = get_checkpoint(slot).await;
 
     // Setup client.
