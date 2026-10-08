@@ -40,6 +40,9 @@ avail-rust = { workspace = true }
 sp-core = { workspace = true }
 jsonrpsee = {workspace = true}
 url = {workspace = true}
+reqwest = { workspace = true }
+alloy-consensus-v2 = { workspace = true }
+alloy-rlp = { workspace = true }
 
 [build-dependencies]
 sp1-build = { workspace = true }
