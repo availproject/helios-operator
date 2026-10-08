@@ -34,6 +34,8 @@ jobs:
   binary_publish:
     needs: [binary_linux_amd64]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
          - uses: actions/download-artifact@v4
            with:
@@ -46,7 +48,7 @@ jobs:
          - name: Publish Binaries
            uses: svenstaro/upload-release-action@v2
            with:
-             repo_token: ${{ secrets.PAT_TOKEN }}
+             repo_token: ${{ secrets.GITHUB_TOKEN }}
              file: /home/runner/work/helios-operator/helios-operator/helios-operator*
              release_name: ${{ steps.prepare.outputs.tag_name }}
              tag: ${{ steps.prepare.outputs.tag_name }}
