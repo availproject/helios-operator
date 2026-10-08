@@ -2,6 +2,7 @@ use alloy::sol;
 use anyhow::{anyhow, Context, Result};
 use avail::vector::events as VectorEvent;
 use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
+use helios_consensus_core::types::LightClientHeader;
 use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
@@ -168,6 +169,20 @@ impl SP1AvailLightClientOperator {
             latest_block, head
         );
 
+        // From Gloas the finalized header only commits to the execution block hash; the program
+        // needs the block header itself to read the execution state root.
+        let execution_block_header = match finality_update.finalized_header() {
+            LightClientHeader::Gloas(header) => {
+                let execution_rpc = env::var("SOURCE_EXECUTION_RPC_URL")
+                    .context("SOURCE_EXECUTION_RPC_URL is required from the Gloas fork")?;
+                Some(
+                    fetch_execution_block_header(&execution_rpc, header.execution_block_hash)
+                        .await?,
+                )
+            }
+            _ => None,
+        };
+
         // Create program inputs
         let expected_current_slot = client.expected_current_slot();
         let inputs = ProofInputs {
@@ -177,6 +192,7 @@ impl SP1AvailLightClientOperator {
             store: client.store.clone(),
             genesis_root: client.config.chain.genesis_root,
             forks: client.config.forks.clone(),
+            execution_block_header,
         };
         let encoded_proof_inputs = serde_cbor::to_vec(&inputs)?;
         stdin.write_slice(&encoded_proof_inputs);
@@ -423,7 +439,7 @@ mod tests {
         let vk = pk.verifying_key();
 
         assert_eq!(
-            "0x00e18a60339ccc23cb2f6ce86aade5cf22f5e9a352053a9cf5cf47c784fcd050",
+            "0x00cc9d09ec8b243f5083ef956a16bd79ccd63954b0211946feafa909e7a29083",
             vk.bytes32()
         );
     }
