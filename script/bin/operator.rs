@@ -10,7 +10,7 @@ use helios_ethereum::rpc::ConsensusRpc;
 use alloy_primitives::hex;
 use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_rust::avail_core::currency::AVAIL;
-use avail_rust::sp_core::{twox_128, Decode};
+use avail_rust::sp_core::{self, twox_128, Decode};
 use avail_rust::{avail, Keypair, Options, SecretUri, SDK};
 use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{

@@ -45,7 +45,6 @@ cargo_metadata = "0.18"
 
 avail-rust = { git = "https://github.com/availproject/avail-rust.git", rev = "24c3df1f703eb6bbea58a62f0a89bab3bd56a58b" }
 jsonrpsee = { version = "0.26.0", features = ["http-client", "macros", "async-client"] }
-sp-core = { version = "21.0.0" }
 
 [patch.crates-io]
 # NOTE: The SP1 precompile patches (sha2/sha3/tiny-keccak/bls12_381) only matter for the
