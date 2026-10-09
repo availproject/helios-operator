@@ -1,17 +1,15 @@
 use alloy::sol;
 use anyhow::{anyhow, Context, Result};
-use avail::vector::events as VectorEvent;
 use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
 use helios_consensus_core::types::LightClientHeader;
 use helios_ethereum::consensus::Inner;
 use helios_ethereum::rpc::http_rpc::HttpRpc;
 use helios_ethereum::rpc::ConsensusRpc;
 
-use alloy_primitives::hex;
-use avail_rust::avail::runtime_types::bounded_collections::bounded_vec::BoundedVec;
-use avail_rust::avail_core::currency::AVAIL;
-use avail_rust::sp_core::{twox_128, Decode};
-use avail_rust::{avail, Keypair, Options, SecretUri, SDK};
+use avail_rust_client::codec::Decode;
+use avail_rust_client::{
+    avail, Client, HasHeader, Keypair, KeypairExt, Options, StorageValue, H256, ONE_AVAIL,
+};
 use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{
     core::client::ClientT,
@@ -33,6 +31,32 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
+// A transaction stops being valid 32 blocks (~11 min) after it is signed. The receipt search then
+// ends on its own; this bounds it when finality stalls.
+const FINALIZATION_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+
+/// Vector pallet event emitted when a proof updates the head. avail-rust ships no binding for it.
+#[derive(Decode)]
+#[codec(crate = avail_rust_client::codec)]
+struct HeadUpdated {
+    slot: u64,
+    finalization_root: H256,
+    execution_state_root: H256,
+}
+
+impl HasHeader for HeadUpdated {
+    // (Vector pallet index, HeadUpdated event index)
+    const HEADER_INDEX: (u8, u8) = (39, 0);
+}
+
+/// Vector pallet storage value holding the latest updated slot.
+struct VectorHead;
+
+impl StorageValue for VectorHead {
+    const PALLET_NAME: &str = "Vector";
+    const STORAGE_NAME: &str = "Head";
+    type VALUE = u64;
+}
 // Skip problematic slot
 struct SP1AvailLightClientOperator {
     env_prover: EnvProver,
@@ -241,83 +265,96 @@ impl SP1AvailLightClientOperator {
 
         let proof_as_bytes = if mock { vec![] } else { proof.bytes() };
         let secret = env::var("AVAIL_SECRET").expect("AVAIL_SECRET env var not set");
-        let avail_rpc = env::var("AVAIL_WS_RPC").expect("AVAIL_WS_RPC env var not set");
-        let secret_uri = SecretUri::from_str(secret.as_str())?;
-        let account = Keypair::from_uri(&secret_uri)?;
+        let avail_rpc = env::var("AVAIL_RPC").expect("AVAIL_RPC env var not set");
+        let account = Keypair::from_str(secret.as_str())?;
 
-        let proof_vec: BoundedVec<u8> = BoundedVec(proof_as_bytes);
-        let pub_values_vec: BoundedVec<u8> = BoundedVec(proof.public_values.to_vec());
-
-        let sdk = SDK::new(avail_rpc.as_str())
+        // A new client per relay: the client caches the runtime version when it connects.
+        let client = Client::new(avail_rpc.as_str())
             .await
-            .expect("Could not create SDK!");
+            .expect("Could not create Avail client!");
 
-        let account_id = account.public_key().to_account_id();
-        let storage_query = avail::storage().system().account(account_id);
-        let best_block_hash = &sdk
-            .client
-            .best_block_hash()
-            .await
-            .expect("Must fetch fetch_best_block_hash!");
-        let storage = sdk.client.storage().at(*best_block_hash);
-        let result = storage.fetch(&storage_query).await?;
-        if let Some(account) = result {
-            info!(
-                "token_amount" = account.data.free.checked_div(AVAIL),
-                "nonce" = account.nonce,
-                "Account info."
-            );
-        }
+        let account_info = client.best().account_info(account.account_id()).await?;
+        info!(
+            "token_amount" = account_info.data.free.checked_div(ONE_AVAIL),
+            "nonce" = account_info.nonce,
+            "Account info."
+        );
 
-        let result = if mock {
+        let tx = if mock {
             info!("Using mocked proof (mock_fulfill)!");
-            let tx = sdk.tx.vector.mock_fulfill(pub_values_vec.0);
-            tx.execute_and_watch_finalization(&account, Options::new())
-                .await
-                .expect("Transaction must be executed!")
+            client
+                .tx()
+                .vector()
+                .mock_fulfill(proof.public_values.to_vec())
         } else {
             info!("Using real proof (fulfill)!");
-            let tx = sdk.tx.vector.fulfill(proof_vec.0, pub_values_vec.0);
-            tx.execute_and_watch_finalization(&account, Options::new())
-                .await
-                .expect("Transaction must be executed!")
+            client
+                .tx()
+                .vector()
+                .fulfill(proof_as_bytes, proof.public_values.to_vec())
+        };
+        let submitted = tx
+            .sign_and_submit(&account, Options::default())
+            .await
+            .expect("Transaction must be executed!");
+
+        // receipt(false) searches finalized blocks only.
+        let Ok(receipt) =
+            tokio::time::timeout(FINALIZATION_TIMEOUT, submitted.receipt(false)).await
+        else {
+            error!(
+                "tx_hash" = format!("{:?}", submitted.ext_hash),
+                "Transaction not finalized within {:?}!", FINALIZATION_TIMEOUT
+            );
+            return Err(anyhow!("Tx not finalized!"));
+        };
+        let Some(receipt) = receipt.expect("Transaction must be executed!") else {
+            error!(
+                "tx_hash" = format!("{:?}", submitted.ext_hash),
+                "Transaction not found in a finalized block before it expired!"
+            );
+            return Err(anyhow!("Tx not found!"));
         };
 
-        if !result.is_successful().unwrap_or(false) {
+        let Ok(events) = receipt.events().await else {
+            error!("No events received!");
+            return Err(anyhow!("No events received!"));
+        };
+
+        if !events.is_extrinsic_success_present() {
+            let dispatch_error = events
+                .first::<avail::system::events::ExtrinsicFailed>()
+                .map(|failed| format!("{:?}", failed.dispatch_error));
             error!(
-                "block_number" = result.block_number,
-                "block_hash" = format!("{:?}", result.block_hash),
-                "tx_hash" = format!("{:?}", result.tx_hash),
+                "block_number" = receipt.block_height,
+                "block_hash" = format!("{:?}", receipt.block_hash),
+                "tx_hash" = format!("{:?}", receipt.ext_hash),
+                "dispatch_error" = dispatch_error,
                 "Transaction send failed!"
             );
             return Err(anyhow!("Tx failed!"));
         }
 
-        let Some(events) = &result.events else {
-            error!("No events received!");
-            return Err(anyhow!("No events received!"));
-        };
-
-        let head_updated = events.find::<VectorEvent::HeadUpdated>();
+        let head_updated = events.first::<HeadUpdated>();
         info!(
-            "block_number" = result.block_number,
-            "block_hash" = format!("{:?}", result.block_hash),
-            "tx_hash" = format!("{:?}", result.tx_hash),
+            "block_number" = receipt.block_height,
+            "block_hash" = format!("{:?}", receipt.block_hash),
+            "tx_hash" = format!("{:?}", receipt.ext_hash),
             "Transaction sent"
         );
 
-        if !head_updated.is_empty() {
+        if let Some(head_updated) = head_updated {
             info!(
-                "slot" = head_updated[0].slot,
-                "finalization_root" = format!("{:?}", head_updated[0].finalization_root),
-                "execution_state_root" = format!("{:?}", head_updated[0].execution_state_root),
+                "slot" = head_updated.slot,
+                "finalization_root" = format!("{:?}", head_updated.finalization_root),
+                "execution_state_root" = format!("{:?}", head_updated.execution_state_root),
                 "Head updated"
             );
         } else {
             error!(
-                "block_number" = result.block_number,
-                "block_hash" = format!("{:?}", result.block_hash),
-                "tx_hash" = format!("{:?}", result.tx_hash),
+                "block_number" = receipt.block_height,
+                "block_hash" = format!("{:?}", receipt.block_hash),
+                "tx_hash" = format!("{:?}", receipt.ext_hash),
                 "No head updated"
             );
         }
@@ -363,20 +400,13 @@ impl SP1AvailLightClientOperator {
 
     /// get_head reads head from the Avail chain
     async fn get_head(&mut self) -> Result<u64> {
-        let pallet = "Vector";
-        let head = "Head";
-
         let finalized_block_hash_str: String = self
             .avail_client
             .request("chain_getFinalizedHead", rpc_params![])
             .await
             .expect("finalized head");
 
-        let head_key = format!(
-            "0x{}{}",
-            hex::encode(twox_128(pallet.as_bytes())),
-            hex::encode(twox_128(head.as_bytes()))
-        );
+        let head_key = VectorHead::hex_encode_storage_key();
 
         let head_str: String = self
             .avail_client
@@ -389,10 +419,8 @@ impl SP1AvailLightClientOperator {
             .expect("Head must exist");
 
         // head cannot be zero on a chain as it is already populated
-        let slot_from_hex =
-            sp_core::bytes::from_hex(head_str.as_str()).expect("Must read slot from hex!");
-        let slot: u64 =
-            Decode::decode(&mut slot_from_hex.as_slice()).expect("Must decode slot from hex!");
+        let slot = VectorHead::decode_hex_storage_value(head_str.as_str())
+            .expect("Must decode slot from hex!");
         Ok(slot)
     }
 }
@@ -428,9 +456,56 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ELF;
+    use crate::{HeadUpdated, VectorHead, ELF};
+    use avail_rust_client::avail_rust_core::decoded_extrinsics::TransactionEncodable;
+    use avail_rust_client::{avail, StorageValue, TransactionEventDecodable};
     use sp1_sdk::Prover;
     use sp1_sdk::{HashableKey, ProverClient, ProvingKey};
+
+    #[test]
+    fn vector_head_key_matches_twox_128_layout() {
+        // twox_128("Vector") ++ twox_128("Head"), the key the operator built before avail-rust 0.5.
+        assert_eq!(
+            "0xd86645c10ec3a857c1f5d453ad1c130c05fe52c2045750c3c492ccdcf62e2b9c",
+            VectorHead::hex_encode_storage_key()
+        );
+        assert_eq!(
+            15392032,
+            VectorHead::decode_hex_storage_value("0x20ddea0000000000").unwrap()
+        );
+    }
+
+    #[test]
+    fn fulfill_calls_encode_for_vector_pallet() {
+        let fulfill = avail::vector::tx::Fulfill {
+            proof: vec![1, 2, 3],
+            public_values: vec![9],
+        };
+        // pallet 39, call 13, then the SCALE-encoded byte vectors
+        assert_eq!(vec![39, 13, 12, 1, 2, 3, 4, 9], fulfill.to_call());
+
+        let mock_fulfill = avail::vector::tx::MockFulfill {
+            public_values: vec![9],
+        };
+        assert_eq!(vec![39, 17, 4, 9], mock_fulfill.to_call());
+    }
+
+    #[test]
+    fn head_updated_decodes_mainnet_event() {
+        // HeadUpdated emitted by the fulfill in Avail mainnet block 3567692.
+        let event = "0x270020ddea00000000005dd6b2872bc7d935a4e8e57628afe782a72890425fb50afac130ac8a7028a2d79bb0f826eb1c50b63a331425cb336163823f156b600511e90080a1e7c6172d38";
+        let head_updated = HeadUpdated::from_event(event).unwrap();
+
+        assert_eq!(15392032, head_updated.slot);
+        assert_eq!(
+            "0x5dd6b2872bc7d935a4e8e57628afe782a72890425fb50afac130ac8a7028a2d7",
+            format!("{:?}", head_updated.finalization_root)
+        );
+        assert_eq!(
+            "0x9bb0f826eb1c50b63a331425cb336163823f156b600511e90080a1e7c6172d38",
+            format!("{:?}", head_updated.execution_state_root)
+        );
+    }
 
     #[tokio::test]
     async fn test_program_verification_key() {
