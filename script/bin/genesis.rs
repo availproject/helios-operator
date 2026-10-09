@@ -1,10 +1,14 @@
 //use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
-use anyhow::Result;
+use alloy_rlp::Decodable;
+use anyhow::{Context, Result};
 /// Generate genesis parameters for light client contract
 use clap::Parser;
+use helios_consensus_core::types::LightClientHeader;
 use serde::{Deserialize, Serialize};
-use sp1_helios_script::{get_checkpoint, get_client, get_latest_checkpoint};
+use sp1_helios_script::{
+    fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
+};
 use sp1_sdk::{utils, HashableKey, Prover, ProverClient, ProvingKey};
 use std::{
     env, fs,
@@ -121,15 +125,22 @@ pub async fn main() -> Result<()> {
     genesis_config.source_chain_id = source_chain_id;
     genesis_config.sync_committee_hash = format!("0x{sync_committee_hash:x}");
     genesis_config.header = format!("0x{finalized_header:x}");
-    genesis_config.execution_state_root = format!(
-        "0x{:x}",
-        helios_client
-            .store
-            .finalized_header
+    // From Gloas the finalized header only commits to the execution block hash, so the state root
+    // comes from the execution block header, which is checked against that hash.
+    let execution_state_root = match &helios_client.store.finalized_header {
+        LightClientHeader::Gloas(header) => {
+            let execution_rpc = env::var("SOURCE_EXECUTION_RPC_URL")
+                .context("SOURCE_EXECUTION_RPC_URL is required from the Gloas fork")?;
+            let rlp =
+                fetch_execution_block_header(&execution_rpc, header.execution_block_hash).await?;
+            alloy_consensus_v2::Header::decode(&mut rlp.as_slice())?.state_root
+        }
+        header => *header
             .execution()
             .expect("Execution payload doesn't exist.")
-            .state_root()
-    );
+            .state_root(),
+    };
+    genesis_config.execution_state_root = format!("0x{execution_state_root:x}");
     genesis_config.head = head;
     genesis_config.helios_program_vkey = vk.bytes32();
     genesis_config.verifier = format!("0x{:x}", Address::ZERO);
