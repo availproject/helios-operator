@@ -1,8 +1,9 @@
+//! Generates the genesis parameters of the light client and writes them to `genesis/genesis.json`.
+
 //use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
 use alloy_rlp::Decodable;
 use anyhow::{Context, Result};
-/// Generate genesis parameters for light client contract
 use clap::Parser;
 use helios_consensus_core::types::LightClientHeader;
 use serde::{Deserialize, Serialize};
@@ -53,8 +54,7 @@ pub async fn main() -> Result<()> {
 
     let args = GenesisArgs::parse();
 
-    // This fetches the .env file from the project root. If the command is invoked in the contracts/ directory,
-    // the .env file in the root of the repo is used.
+    // Load the env file from the repository root, so the command works from any subdirectory.
     if let Some(root) = find_project_root() {
         dotenv::from_path(root.join(args.env_file)).ok();
     } else {
@@ -84,7 +84,7 @@ pub async fn main() -> Result<()> {
         .tree_hash_root();
     let head = helios_client.store.finalized_header.clone().beacon().slot;
 
-    // prevents genesis to have a slot that is not checkpoint.
+    // The genesis head must be a checkpoint slot, which is the first slot of an epoch.
     assert!(
         head.is_multiple_of(32),
         "Head is not a checkpoint slot, please deploy again."
@@ -116,7 +116,8 @@ pub async fn main() -> Result<()> {
             .workspace_root,
     );
 
-    // Read the Genesis config from the contracts directory.
+    // Start from the existing genesis/genesis.json. The fields that this tool does not set
+    // (`guardian`) keep their value.
     let mut genesis_config = get_existing_genesis_config(&workspace_root)?;
 
     genesis_config.genesis_validators_root = format!("0x{genesis_root:x}");

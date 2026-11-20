@@ -1,4 +1,4 @@
-use alloy::sol_types::SolValue;
+use alloy_sol_types::SolValue;
 use anyhow::Result;
 use clap::Parser;
 use helios_consensus_core::types::LightClientHeader;
@@ -10,8 +10,8 @@ use sp1_helios_script::{
 use sp1_sdk::{utils::setup_logger, Prover, ProverClient, SP1Stdin};
 
 #[derive(Parser, Debug, Clone)]
-#[command(about = "Get the genesis parameters from a block.")]
-pub struct GenesisArgs {
+#[command(about = "Execute the SP1 Helios program on live data from a checkpoint slot. No proof.")]
+pub struct TestArgs {
     #[arg(long)]
     pub slot: Option<u64>,
 }
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     setup_logger();
     // Test checkpoint slot: a post-Gloas Sepolia checkpoint (epoch 353462). The beacon node must
     // still serve its light-client bootstrap and updates, so move it forward when it ages out.
-    let slot = GenesisArgs::parse().slot.unwrap_or(11310784);
+    let slot = TestArgs::parse().slot.unwrap_or(11310784);
     let checkpoint = get_checkpoint(slot).await;
 
     // Setup client.

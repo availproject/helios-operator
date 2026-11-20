@@ -10,11 +10,11 @@ use helios_ethereum::{
     rpc::http_rpc::HttpRpc,
 };
 
-use jsonrpsee::tracing::info;
 use std::backtrace::{Backtrace, BacktraceStatus};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc::channel, watch};
+use tracing::info;
 use url::Url;
 
 pub const MAX_REQUEST_LIGHT_CLIENT_UPDATES: u8 = 128;
