@@ -4,7 +4,9 @@ use clap::Parser;
 use helios_consensus_core::types::LightClientHeader;
 use helios_ethereum::rpc::ConsensusRpc;
 use sp1_helios_primitives::types::{ProofInputs, ProofOutputs};
-use sp1_helios_script::{fetch_execution_block_header, get_checkpoint, get_client, get_updates};
+use sp1_helios_script::{
+    fetch_execution_block_header, get_checkpoint, get_client, get_updates, install_panic_hook,
+};
 use sp1_sdk::{utils::setup_logger, Prover, ProverClient, SP1Stdin};
 
 #[derive(Parser, Debug, Clone)]
@@ -18,6 +20,7 @@ const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
 #[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<()> {
+    install_panic_hook();
     dotenv::dotenv().ok();
     setup_logger();
     // Test checkpoint slot: a post-Gloas Sepolia checkpoint (epoch 353462). The beacon node must

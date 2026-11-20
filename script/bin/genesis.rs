@@ -8,6 +8,7 @@ use helios_consensus_core::types::LightClientHeader;
 use serde::{Deserialize, Serialize};
 use sp1_helios_script::{
     fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
+    install_panic_hook,
 };
 use sp1_sdk::{utils, HashableKey, Prover, ProverClient, ProvingKey};
 use std::{
@@ -47,6 +48,7 @@ pub struct GenesisConfig {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    install_panic_hook();
     utils::setup_logger();
 
     let args = GenesisArgs::parse();

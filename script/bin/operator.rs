@@ -386,7 +386,7 @@ impl SP1AvailLightClientOperator {
                 // Contract is up to date. Nothing to update.
             }
             Err(e) => {
-                error!("Request for update failed: {}", e);
+                error!("Request for update failed: {}", redact_urls(&e.to_string()));
                 return Err(e);
             }
         };
@@ -427,6 +427,7 @@ impl SP1AvailLightClientOperator {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    install_panic_hook();
     env::set_var("RUST_LOG", "info");
     dotenv::dotenv().ok();
     let log_level = env::var("LOG_LEVEL").unwrap_or("info".to_string());
@@ -448,8 +449,10 @@ async fn main() -> Result<()> {
 
     let mut operator = SP1AvailLightClientOperator::new().await;
     if let Err(e) = operator.run(job_delay_mins).await {
-        error!("Error running operator: {}", e);
-        return Err(anyhow!("Error running operator: {}", e));
+        // The error text can hold a provider URL with its API key.
+        let message = redact_urls(&e.to_string());
+        error!("Error running operator: {}", message);
+        return Err(anyhow!("Error running operator: {}", message));
     }
     Ok(())
 }
