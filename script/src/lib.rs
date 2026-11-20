@@ -10,10 +10,11 @@ use helios_ethereum::{
     rpc::http_rpc::HttpRpc,
 };
 
-use jsonrpsee::tracing::info;
+use std::backtrace::{Backtrace, BacktraceStatus};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc::channel, watch};
+use tracing::info;
 use url::Url;
 
 pub const MAX_REQUEST_LIGHT_CLIENT_UPDATES: u8 = 128;
@@ -24,6 +25,69 @@ const RPC_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 fn http_client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder().timeout(RPC_TIMEOUT).build()?)
+}
+
+/// Returns `text` with every URL cut down to its scheme and host.
+///
+/// A provider URL holds the API key in the path, in the query or in `user:password@`. `reqwest`
+/// adds the request URL to its error text, and helios and avail-rust copy that text into their
+/// own errors. So an error must pass through this function before it is logged or printed.
+pub fn redact_urls(text: &str) -> String {
+    const SCHEME_END: &str = "://";
+
+    let mut redacted = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(index) = rest.find(SCHEME_END) {
+        let (head, tail) = rest.split_at(index + SCHEME_END.len());
+        redacted.push_str(head);
+        rest = tail;
+
+        // "://" with no scheme in front of it is not a URL.
+        if !head[..index].ends_with(|c: char| c.is_ascii_alphanumeric()) {
+            continue;
+        }
+
+        let url_len = rest.find(ends_url).unwrap_or(rest.len());
+        let (url, tail) = rest.split_at(url_len);
+        let authority_len = url.find(['/', '?', '#']).unwrap_or(url.len());
+        let (authority, path) = url.split_at(authority_len);
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+
+        redacted.push_str(host);
+        redacted.push_str(if path.is_empty() || path == "/" {
+            path
+        } else {
+            "/<redacted>"
+        });
+        rest = tail;
+    }
+    redacted.push_str(rest);
+
+    redacted
+}
+
+/// Inside an error message a URL ends at whitespace, at a quote or at a closing bracket.
+fn ends_url(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '"' | '\'' | ')' | '>' | '`')
+}
+
+/// Prints a panic the way the standard hook does, but with the URLs in its message redacted.
+///
+/// Many RPC failures end in `unwrap` or `expect`, and their messages can hold the provider URL.
+pub fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        let thread = std::thread::current();
+        let name = thread.name().unwrap_or("<unnamed>");
+        eprintln!("thread '{name}' {}", redact_urls(&panic_info.to_string()));
+
+        // The backtrace is captured only when RUST_BACKTRACE asks for it.
+        let backtrace = Backtrace::capture();
+        if backtrace.status() == BacktraceStatus::Captured {
+            eprintln!("stack backtrace:\n{backtrace}");
+        }
+    }));
 }
 
 /// Fetch updates for client
@@ -86,7 +150,13 @@ pub async fn get_checkpoint(slot: u64) -> B256 {
         .get(&url)
         .send()
         .await
-        .unwrap_or_else(|e| panic!("Cannot get beacon header at slot {slot}: {e}"));
+        // The reqwest error text ends with the request URL, which holds the API key.
+        .unwrap_or_else(|e| {
+            panic!(
+                "Cannot get beacon header at slot {slot}: {}",
+                e.without_url()
+            )
+        });
     let status = response.status();
     let body = response.text().await.unwrap();
     if !status.is_success() {
@@ -116,7 +186,13 @@ pub async fn fetch_execution_block_header(
         .json(&request)
         .send()
         .await
-        .map_err(|e| anyhow!("Cannot get execution block {block_hash}: {e}"))?
+        // The reqwest error text ends with the request URL, which holds the API key.
+        .map_err(|e| {
+            anyhow!(
+                "Cannot get execution block {block_hash}: {}",
+                e.without_url()
+            )
+        })?
         .json()
         .await?;
     let block = response
@@ -178,6 +254,80 @@ pub async fn get_client(checkpoint: B256) -> Inner<MainnetConsensusSpec, HttpRpc
 
     client.bootstrap(checkpoint).await.unwrap();
     client
+}
+
+#[cfg(test)]
+mod redact_urls_tests {
+    use super::redact_urls;
+
+    #[test]
+    fn removes_the_path_that_holds_the_api_key() {
+        assert_eq!(
+            redact_urls(
+                "error sending request for url (https://lb.example.com/eth/SECRET/eth/v1/beacon/headers/7)"
+            ),
+            "error sending request for url (https://lb.example.com/<redacted>)"
+        );
+    }
+
+    #[test]
+    fn removes_the_query_and_the_credentials() {
+        let cases = [
+            (
+                "https://rpc.example.com?apikey=SECRET",
+                "https://rpc.example.com/<redacted>",
+            ),
+            (
+                "https://rpc.example.com/v2?apikey=SECRET#top",
+                "https://rpc.example.com/<redacted>",
+            ),
+            (
+                "wss://user:SECRET@node.example.com:443/ws",
+                "wss://node.example.com:443/<redacted>",
+            ),
+            ("http://user:SECRET@10.0.0.1:8545", "http://10.0.0.1:8545"),
+            ("http://[::1]:8545/SECRET", "http://[::1]:8545/<redacted>"),
+        ];
+        for (text, want) in cases {
+            assert_eq!(redact_urls(text), want, "input: {text}");
+        }
+    }
+
+    #[test]
+    fn keeps_the_text_around_every_url() {
+        let cases = [
+            (
+                "first https://a.example.com/SECRET1 then http://b.example.com/SECRET2 → end",
+                "first https://a.example.com/<redacted> then http://b.example.com/<redacted> → end",
+            ),
+            (
+                r#"Error { url: "https://a.example.com/SECRET", kind: Request }"#,
+                r#"Error { url: "https://a.example.com/<redacted>", kind: Request }"#,
+            ),
+            (
+                "failed for 'https://a.example.com/SECRET'",
+                "failed for 'https://a.example.com/<redacted>'",
+            ),
+        ];
+        for (text, want) in cases {
+            assert_eq!(redact_urls(text), want, "input: {text}");
+        }
+    }
+
+    #[test]
+    fn leaves_text_without_a_secret_unchanged() {
+        let cases = [
+            "",
+            "Head must exist",
+            "status: 404, raw response: b\"NOT_FOUND\"",
+            "connecting to https://rpc.example.com failed",
+            "connecting to https://rpc.example.com/ failed",
+            "not a url: a :// b and ://c",
+        ];
+        for text in cases {
+            assert_eq!(redact_urls(text), text);
+        }
+    }
 }
 
 #[cfg(test)]

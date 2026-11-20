@@ -1,4 +1,3 @@
-use alloy::sol;
 use anyhow::{anyhow, Context, Result};
 use helios_consensus_core::consensus_spec::MainnetConsensusSpec;
 use helios_consensus_core::types::LightClientHeader;
@@ -10,7 +9,6 @@ use avail_rust_client::codec::Decode;
 use avail_rust_client::{
     avail, Client, HasHeader, Keypair, KeypairExt, Options, StorageValue, H256, ONE_AVAIL,
 };
-use jsonrpsee::tracing::{error, info, warn};
 use jsonrpsee::{
     core::client::ClientT,
     http_client::{HttpClient, HttpClientBuilder},
@@ -27,6 +25,7 @@ use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
+use tracing::{error, info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -57,50 +56,14 @@ impl StorageValue for VectorHead {
     const STORAGE_NAME: &str = "Head";
     type VALUE = u64;
 }
-// Skip problematic slot
+
+/// Proves Ethereum finality with SP1 Helios and relays each proof to the Vector pallet on Avail.
 struct SP1AvailLightClientOperator {
     env_prover: EnvProver,
     avail_client: HttpClient,
     pk: EnvProvingKey,
 }
 
-sol! {
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    contract SP1Helios {
-        bytes32 public immutable GENESIS_VALIDATORS_ROOT;
-        uint256 public immutable GENESIS_TIME;
-        uint256 public immutable SECONDS_PER_SLOT;
-        uint256 public immutable SLOTS_PER_PERIOD;
-        uint32 public immutable SOURCE_CHAIN_ID;
-        uint256 public head;
-        mapping(uint256 => bytes32) public syncCommittees;
-        mapping(uint256 => bytes32) public executionStateRoots;
-        mapping(uint256 => bytes32) public headers;
-        bytes32 public heliosProgramVkey;
-        address public verifier;
-
-        struct ProofOutputs {
-            bytes32 executionStateRoot;
-            bytes32 newHeader;
-            bytes32 nextSyncCommitteeHash;
-            uint256 newHead;
-            bytes32 prevHeader;
-            uint256 prevHead;
-            bytes32 syncCommitteeHash;
-        }
-
-        event HeadUpdate(uint256 indexed slot, bytes32 indexed root);
-        event SyncCommitteeUpdate(uint256 indexed period, bytes32 indexed root);
-
-        function update(bytes calldata proof, bytes calldata publicValues) external;
-        function getSyncCommitteePeriod(uint256 slot) internal view returns (uint256);
-        function getCurrentSlot() internal view returns (uint256);
-        function getCurrentEpoch() internal view returns (uint256);
-    }
-}
-
-/// Implementation of the avail light clien operator that relays transactions to the Avail
 impl SP1AvailLightClientOperator {
     pub async fn new() -> Self {
         dotenv::dotenv().ok();
@@ -126,19 +89,21 @@ impl SP1AvailLightClientOperator {
         }
     }
 
-    /// Fetch values and generate an 'update' proof for the SP1 Helios contract.
+    /// Fetches the light client data and generates a proof that moves the Vector head forward.
+    ///
+    /// Returns `None` when there is nothing to prove.
     async fn request_update(
-        &mut self,
+        &self,
         client: Inner<MainnetConsensusSpec, HttpRpc>,
     ) -> Result<Option<SP1ProofWithPublicValues>> {
-        // head is initialised
+        // The latest slot the Vector pallet has verified.
         let head = self.get_head().await?;
 
         info!("Head/Slot {}", head);
 
         let mut stdin = SP1Stdin::new();
 
-        // Setup client.
+        // Sync committee updates, starting at the sync period of the bootstrapped checkpoint.
         let sync_committee_updates = get_updates(&client).await;
 
         // Retry configuration for non-checkpoint slots
@@ -158,7 +123,8 @@ impl SP1AvailLightClientOperator {
 
             let latest_block = finality_update.finalized_header().beacon().slot;
 
-            // Check if contract is up to date - this is expected, no retry needed
+            // The Vector head is already at or past this finalized slot.
+            // This is expected, so there is no retry.
             if latest_block <= head {
                 info!("Contract is up to date. Nothing to update.");
                 return Ok(None);
@@ -362,12 +328,12 @@ impl SP1AvailLightClientOperator {
         Ok(())
     }
 
-    /// Start the operator.
-    async fn run(&mut self, job_delay: u64) -> Result<()> {
+    /// Runs one update and returns. The operator does not loop: a scheduler starts every run.
+    async fn run(&self) -> Result<()> {
         info!("Starting SP1 Helios operator for Avail");
 
-        // Get the current slot from the contract
         let start = Instant::now();
+        // Read the current head slot from the Vector pallet
         let slot = self.get_head().await?;
         info!("Current slot: {}", slot);
 
@@ -383,10 +349,11 @@ impl SP1AvailLightClientOperator {
                 self.relay_vector_update(proof).await?;
             }
             Ok(None) => {
-                // Contract is up to date. Nothing to update.
+                // Nothing to relay: the head is up to date, or the retries found no
+                // checkpoint slot.
             }
             Err(e) => {
-                error!("Request for update failed: {}", e);
+                error!("Request for update failed: {}", redact_urls(&e.to_string()));
                 return Err(e);
             }
         };
@@ -394,12 +361,12 @@ impl SP1AvailLightClientOperator {
 
         info!("duration" = duration.as_secs(), "Job finished");
 
-        info!("Sleeping for {:?} minutes", job_delay);
         Ok(())
     }
 
-    /// get_head reads head from the Avail chain
-    async fn get_head(&mut self) -> Result<u64> {
+    /// Reads `Vector::Head` at the finalized Avail block. It is the latest slot the pallet has
+    /// verified.
+    async fn get_head(&self) -> Result<u64> {
         let finalized_block_hash_str: String = self
             .avail_client
             .request("chain_getFinalizedHead", rpc_params![])
@@ -408,6 +375,7 @@ impl SP1AvailLightClientOperator {
 
         let head_key = VectorHead::hex_encode_storage_key();
 
+        // The pallet must be initialised: an empty storage key returns null, and that fails here.
         let head_str: String = self
             .avail_client
             .request(
@@ -418,7 +386,6 @@ impl SP1AvailLightClientOperator {
             .context("Cannot parse head from Avail chain")
             .expect("Head must exist");
 
-        // head cannot be zero on a chain as it is already populated
         let slot = VectorHead::decode_hex_storage_value(head_str.as_str())
             .expect("Must decode slot from hex!");
         Ok(slot)
@@ -427,6 +394,7 @@ impl SP1AvailLightClientOperator {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    install_panic_hook();
     env::set_var("RUST_LOG", "info");
     dotenv::dotenv().ok();
     let log_level = env::var("LOG_LEVEL").unwrap_or("info".to_string());
@@ -442,14 +410,12 @@ async fn main() -> Result<()> {
         .with(LevelFilter::from_str(&log_level)?)
         .init();
 
-    let job_delay_mins = env::var("LOOP_DELAY_MINS")
-        .unwrap_or("5".to_string())
-        .parse()?;
-
-    let mut operator = SP1AvailLightClientOperator::new().await;
-    if let Err(e) = operator.run(job_delay_mins).await {
-        error!("Error running operator: {}", e);
-        return Err(anyhow!("Error running operator: {}", e));
+    let operator = SP1AvailLightClientOperator::new().await;
+    if let Err(e) = operator.run().await {
+        // The error text can hold a provider URL with its API key.
+        let message = redact_urls(&e.to_string());
+        error!("Error running operator: {}", message);
+        return Err(anyhow!("Error running operator: {}", message));
     }
     Ok(())
 }
