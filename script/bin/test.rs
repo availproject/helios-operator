@@ -8,10 +8,25 @@ use sp1_helios_script::{
     fetch_execution_block_header, get_checkpoint, get_client, get_updates, install_panic_hook,
 };
 use sp1_sdk::{utils::setup_logger, Prover, ProverClient, SP1Stdin};
+use std::time::Duration;
+
+const SLOTS_PER_EPOCH: u64 = 32;
+
+/// How many epochs behind the finalized epoch the test starts when `--slot` is not given. The gap
+/// leaves a newer head to prove, also when the finality update of the node is an epoch or two
+/// behind its finalized header.
+const START_LAG_EPOCHS: u64 = 8;
+
+/// How many older epochs are tried when the first slot of an epoch has no block.
+const MAX_SKIPPED_EPOCHS: u64 = 8;
+
+/// Timeout for one beacon header request.
+const HEADER_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Execute the SP1 Helios program on live data from a checkpoint slot. No proof.")]
 pub struct TestArgs {
+    /// Checkpoint slot to start from. Default: a recent finalized checkpoint.
     #[arg(long)]
     pub slot: Option<u64>,
 }
@@ -23,9 +38,16 @@ async fn main() -> Result<()> {
     install_panic_hook();
     dotenv::dotenv().ok();
     setup_logger();
-    // Test checkpoint slot: a post-Gloas Sepolia checkpoint (epoch 353462). The beacon node must
-    // still serve its light-client bootstrap and updates, so move it forward when it ages out.
-    let slot = TestArgs::parse().slot.unwrap_or(11310784);
+    // Without `--slot` the test starts from a recent finalized checkpoint. A fixed slot stops
+    // working, because a beacon node serves a light-client bootstrap only for some days.
+    let slot = match TestArgs::parse().slot {
+        Some(slot) => slot,
+        None => {
+            let consensus_rpc = std::env::var("SOURCE_CONSENSUS_RPC_URL").unwrap();
+            recent_checkpoint_slot(&consensus_rpc).await
+        }
+    };
+    println!("Start slot: {slot}");
     let checkpoint = get_checkpoint(slot).await;
 
     // Setup client.
@@ -70,4 +92,163 @@ async fn main() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Returns the slot of a recent finalized checkpoint: the first slot of the epoch that lies
+/// `START_LAG_EPOCHS` epochs behind the finalized epoch.
+///
+/// A beacon node serves the light-client bootstrap of a checkpoint only for some days, so a fixed
+/// slot stops working. A missed slot has no block and no bootstrap, so when the first slot of an
+/// epoch was missed, the epoch before it is taken.
+async fn recent_checkpoint_slot(consensus_rpc: &str) -> u64 {
+    let finalized_slot = beacon_header_slot(consensus_rpc, "finalized")
+        .await
+        .expect("The beacon node has no finalized header");
+
+    let finalized_epoch_start = finalized_slot - finalized_slot % SLOTS_PER_EPOCH;
+    let newest_slot = finalized_epoch_start.saturating_sub(START_LAG_EPOCHS * SLOTS_PER_EPOCH);
+    for skipped_epochs in 0..=MAX_SKIPPED_EPOCHS {
+        let slot = newest_slot.saturating_sub(skipped_epochs * SLOTS_PER_EPOCH);
+        if beacon_header_slot(consensus_rpc, &slot.to_string())
+            .await
+            .is_some()
+        {
+            return slot;
+        }
+    }
+
+    panic!(
+        "No block in the first slot of the {} epochs that end at slot {newest_slot}",
+        MAX_SKIPPED_EPOCHS + 1
+    );
+}
+
+/// Returns the slot of the beacon header `block_id` (a slot number or `finalized`), or `None` when
+/// the node has no block there.
+async fn beacon_header_slot(consensus_rpc: &str, block_id: &str) -> Option<u64> {
+    #[derive(serde::Deserialize)]
+    struct HeaderResponse {
+        data: HeaderData,
+    }
+    #[derive(serde::Deserialize)]
+    struct HeaderData {
+        header: SignedHeader,
+    }
+    #[derive(serde::Deserialize)]
+    struct SignedHeader {
+        message: HeaderMessage,
+    }
+    #[derive(serde::Deserialize)]
+    struct HeaderMessage {
+        // The beacon API sends numbers as strings.
+        slot: String,
+    }
+
+    let url = format!(
+        "{}/eth/v1/beacon/headers/{}",
+        consensus_rpc.trim_end_matches('/'),
+        block_id
+    );
+    let response = reqwest::Client::builder()
+        .timeout(HEADER_TIMEOUT)
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+        // The reqwest error text ends with the request URL, which holds the API key.
+        .unwrap_or_else(|e| panic!("Cannot get beacon header {block_id}: {}", e.without_url()));
+    let status = response.status();
+    let body = response.text().await.unwrap();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return None;
+    }
+    if !status.is_success() {
+        panic!("Cannot get beacon header {block_id}: HTTP {status}: {body}");
+    }
+    let header: HeaderResponse = serde_json::from_str(&body).unwrap();
+
+    Some(header.data.header.message.slot.parse().unwrap())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recent_checkpoint_slot;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Starts a stand-in for a beacon node and returns its URL.
+    ///
+    /// It serves the header of `finalized_slot` for `finalized`, and a header for every slot in
+    /// `slots_with_block`. Every other slot answers 404, like a missed slot does.
+    fn serve_headers(finalized_slot: u64, slots_with_block: &'static [u64]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut request = [0u8; 1024];
+                let read = stream.read(&mut request).unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+
+                // The request line is "GET /eth/v1/beacon/headers/{block_id} HTTP/1.1".
+                let block_id = request
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|path| path.rsplit('/').next())
+                    .unwrap_or_default();
+                let slot = if block_id == "finalized" {
+                    Some(finalized_slot)
+                } else {
+                    block_id
+                        .parse()
+                        .ok()
+                        .filter(|slot| slots_with_block.contains(slot))
+                };
+                let (status, body) = match slot {
+                    Some(slot) => (
+                        "200 OK",
+                        format!(r#"{{"data":{{"header":{{"message":{{"slot":"{slot}"}}}}}}}}"#),
+                    ),
+                    None => (
+                        "404 Not Found",
+                        r#"{"code":404,"message":"Block not found"}"#.to_string(),
+                    ),
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+
+        url
+    }
+
+    #[tokio::test]
+    async fn starts_eight_epochs_behind_the_finalized_checkpoint() {
+        let consensus_rpc = serve_headers(32_000, &[31_744]);
+
+        assert_eq!(recent_checkpoint_slot(&consensus_rpc).await, 31_744);
+    }
+
+    #[tokio::test]
+    async fn counts_the_epochs_from_the_start_of_the_finalized_epoch() {
+        // The first slot of epoch 1000 was missed, so the finalized block is the last block of
+        // epoch 999. Epoch 999 starts at slot 31968.
+        let consensus_rpc = serve_headers(31_999, &[31_712]);
+
+        assert_eq!(recent_checkpoint_slot(&consensus_rpc).await, 31_712);
+    }
+
+    #[tokio::test]
+    async fn skips_an_epoch_whose_first_slot_has_no_block() {
+        // Slots 31744 and 31712 were missed.
+        let consensus_rpc = serve_headers(32_000, &[31_680]);
+
+        assert_eq!(recent_checkpoint_slot(&consensus_rpc).await, 31_680);
+    }
 }
