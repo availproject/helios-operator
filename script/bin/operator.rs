@@ -126,7 +126,7 @@ impl SP1AvailLightClientOperator {
             // The Vector head is already at or past this finalized slot.
             // This is expected, so there is no retry.
             if latest_block <= head {
-                info!("Contract is up to date. Nothing to update.");
+                info!("Vector head is up to date. Nothing to update.");
                 return Ok(None);
             }
 
