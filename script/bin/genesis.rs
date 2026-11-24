@@ -8,13 +8,14 @@ use clap::Parser;
 use helios_consensus_core::types::LightClientHeader;
 use serde::{Deserialize, Serialize};
 use sp1_helios_script::{
-    fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
+    exit_code, fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
     install_panic_hook,
 };
 use sp1_sdk::{utils, HashableKey, Prover, ProverClient, ProvingKey};
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    process::ExitCode,
 };
 use tree_hash::TreeHash;
 
@@ -48,8 +49,14 @@ pub struct GenesisConfig {
 }
 
 #[tokio::main]
-pub async fn main() -> Result<()> {
+pub async fn main() -> ExitCode {
     install_panic_hook();
+    // The error goes through `exit_code`, because Rust prints an error returned from `main`
+    // without redaction.
+    exit_code(run().await)
+}
+
+async fn run() -> Result<()> {
     utils::setup_logger();
 
     let args = GenesisArgs::parse();

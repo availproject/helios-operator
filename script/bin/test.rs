@@ -5,9 +5,11 @@ use helios_consensus_core::types::LightClientHeader;
 use helios_ethereum::rpc::ConsensusRpc;
 use sp1_helios_primitives::types::{ProofInputs, ProofOutputs};
 use sp1_helios_script::{
-    fetch_execution_block_header, get_checkpoint, get_client, get_updates, install_panic_hook,
+    exit_code, fetch_execution_block_header, get_checkpoint, get_client, get_updates,
+    install_panic_hook,
 };
 use sp1_sdk::{utils::setup_logger, Prover, ProverClient, SP1Stdin};
+use std::process::ExitCode;
 use std::time::Duration;
 
 const SLOTS_PER_EPOCH: u64 = 32;
@@ -32,10 +34,17 @@ pub struct TestArgs {
 }
 
 const ELF: &[u8] = include_bytes!("../../elf/sp1-helios-elf");
-#[allow(unused)]
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> ExitCode {
     install_panic_hook();
+    // The error goes through `exit_code`, because Rust prints an error returned from `main`
+    // without redaction.
+    exit_code(run().await)
+}
+
+#[allow(unused)]
+async fn run() -> Result<()> {
     dotenv::dotenv().ok();
     setup_logger();
     // Without `--slot` the test starts from a recent finalized checkpoint. A fixed slot stops

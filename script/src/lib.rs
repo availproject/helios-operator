@@ -11,6 +11,7 @@ use helios_ethereum::{
 };
 
 use std::backtrace::{Backtrace, BacktraceStatus};
+use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc::channel, watch};
@@ -88,6 +89,25 @@ pub fn install_panic_hook() {
             eprintln!("stack backtrace:\n{backtrace}");
         }
     }));
+}
+
+/// Prints the error of a failed `main` with its URLs redacted, and returns the exit code.
+///
+/// When `main` returns the error instead, Rust prints it as it is. That print does not pass
+/// through the panic hook, so a provider URL inside the error would reach the output.
+pub fn exit_code(result: Result<()>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{}", error_report(&error));
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Returns the text that Rust prints for an error returned from `main`, with the URLs redacted.
+fn error_report(error: &anyhow::Error) -> String {
+    redact_urls(&format!("Error: {error:?}"))
 }
 
 /// Fetch updates for client
@@ -327,6 +347,29 @@ mod redact_urls_tests {
         for text in cases {
             assert_eq!(redact_urls(text), text);
         }
+    }
+}
+
+#[cfg(test)]
+mod error_report_tests {
+    use super::error_report;
+    use anyhow::anyhow;
+
+    #[test]
+    fn redacts_the_urls_of_the_error_and_of_its_causes() {
+        let error =
+            anyhow!("error sending request for url (https://lb.example.com/eth/SECRET1/headers/7)")
+                .context("Cannot reach https://rpc.example.com/v2?apikey=SECRET2");
+
+        let report = error_report(&error);
+
+        // A backtrace can follow when RUST_BACKTRACE is set, so only the start is compared.
+        let want = "Error: Cannot reach https://rpc.example.com/<redacted>\n\
+                    \n\
+                    Caused by:\n    \
+                    error sending request for url (https://lb.example.com/<redacted>)";
+        assert!(report.starts_with(want), "report: {report}");
+        assert!(!report.contains("SECRET"), "report: {report}");
     }
 }
 
