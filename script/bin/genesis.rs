@@ -1,18 +1,21 @@
+//! Generates the genesis parameters of the light client and writes them to `genesis/genesis.json`.
+
 //use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
 use alloy_rlp::Decodable;
 use anyhow::{Context, Result};
-/// Generate genesis parameters for light client contract
 use clap::Parser;
 use helios_consensus_core::types::LightClientHeader;
 use serde::{Deserialize, Serialize};
 use sp1_helios_script::{
-    fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
+    exit_code, fetch_execution_block_header, get_checkpoint, get_client, get_latest_checkpoint,
+    install_panic_hook,
 };
 use sp1_sdk::{utils, HashableKey, Prover, ProverClient, ProvingKey};
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    process::ExitCode,
 };
 use tree_hash::TreeHash;
 
@@ -46,13 +49,19 @@ pub struct GenesisConfig {
 }
 
 #[tokio::main]
-pub async fn main() -> Result<()> {
+pub async fn main() -> ExitCode {
+    install_panic_hook();
+    // The error goes through `exit_code`, because Rust prints an error returned from `main`
+    // without redaction.
+    exit_code(run().await)
+}
+
+async fn run() -> Result<()> {
     utils::setup_logger();
 
     let args = GenesisArgs::parse();
 
-    // This fetches the .env file from the project root. If the command is invoked in the contracts/ directory,
-    // the .env file in the root of the repo is used.
+    // Load the env file from the repository root, so the command works from any subdirectory.
     if let Some(root) = find_project_root() {
         dotenv::from_path(root.join(args.env_file)).ok();
     } else {
@@ -82,7 +91,7 @@ pub async fn main() -> Result<()> {
         .tree_hash_root();
     let head = helios_client.store.finalized_header.clone().beacon().slot;
 
-    // prevents genesis to have a slot that is not checkpoint.
+    // The genesis head must be a checkpoint slot, which is the first slot of an epoch.
     assert!(
         head.is_multiple_of(32),
         "Head is not a checkpoint slot, please deploy again."
@@ -114,7 +123,8 @@ pub async fn main() -> Result<()> {
             .workspace_root,
     );
 
-    // Read the Genesis config from the contracts directory.
+    // Start from the existing genesis/genesis.json. The fields that this tool does not set
+    // (`guardian`) keep their value.
     let mut genesis_config = get_existing_genesis_config(&workspace_root)?;
 
     genesis_config.genesis_validators_root = format!("0x{genesis_root:x}");
