@@ -480,7 +480,7 @@ mod tests {
         let vk = pk.verifying_key();
 
         assert_eq!(
-            "0x00a45c84e8f97c5e821aaff9cf2fb0531fc1ecdaedc1e3228e473e8bf1bc9f0f",
+            "0x00e18a60339ccc23cb2f6ce86aade5cf22f5e9a352053a9cf5cf47c784fcd050",
             vk.bytes32()
         );
     }
