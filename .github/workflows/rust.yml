@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -24,13 +24,13 @@ jobs:
       run: cargo build --verbose
     
     - name: Check code formatting
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
       with:
         command: fmt
         args: --check
         
     - name: Check clippy lints
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
       with:
         command: clippy
         args: --workspace -- -D warnings
